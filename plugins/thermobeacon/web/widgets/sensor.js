@@ -1,11 +1,13 @@
 // One sensor: big temperature, smaller humidity, faded icon behind them.
-import { getJson } from '../api.js';
-import { formatTemp, formatHum, formatAge, formatClock, isStale } from '../format.js';
+import { getJson } from '../../../js/api.js';
+import { formatTemp, formatHum, formatAge, formatClock, isStale } from '../../../js/format.js';
+import { getPrefs } from '../prefs.js';
 
 // Placeholder icons; the user will choose final ones later.
 const ICONS = { room: '🛋️', kitchen: '🍳', tree: '🌳' };
 
 export function create(el, cfg, ctx) {
+  const prefs = getPrefs(ctx.layout);
   const info = ctx.config.sensors.find((s) => s.id === cfg.sensor) || { id: cfg.sensor, name: cfg.sensor, icon: '' };
   el.innerHTML = `
     <div class="bg-icon"></div>
@@ -25,11 +27,11 @@ export function create(el, cfg, ctx) {
 
   const graphBtn = el.querySelector('.graph-btn');
   const refreshBtn = el.querySelector('.refresh-btn');
-  const showGraphState = () => graphBtn.classList.toggle('on', ctx.prefs.graphSensors().includes(info.id));
+  const showGraphState = () => graphBtn.classList.toggle('on', prefs.graphSensors().includes(info.id));
   showGraphState();
 
   graphBtn.addEventListener('click', () => {
-    ctx.prefs.toggleGraphSensor(info.id);
+    prefs.toggleGraphSensor(info.id);
     showGraphState();
     ctx.bus.dispatchEvent(new Event('graph-sensors-changed'));
   });
@@ -38,7 +40,7 @@ export function create(el, cfg, ctx) {
   async function refresh() {
     refreshBtn.classList.add('busy');
     try {
-      const data = await getJson(`api/sensors?id=${encodeURIComponent(info.id)}`);
+      const data = await getJson(`api/thermobeacon/sensors?id=${encodeURIComponent(info.id)}`);
       const latest = data.sensors[0].latest;
       const stale = isStale(latest && latest.ts, data.now, ctx.config.stale_after_seconds);
       el.classList.toggle('stale', stale);

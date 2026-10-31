@@ -1,5 +1,6 @@
 // Viewer choices that survive a page reload: which sensors the graph shows
-// and which time range it uses. Stored in localStorage.
+// and which time range it uses. Stored in localStorage. The sensor and
+// graph widgets share one prefs object through getPrefs().
 
 const KEY = 'thermobeacon.prefs.v1';
 const RANGES = [24, 48, 168];
@@ -43,4 +44,17 @@ export function createPrefs(storage, defaults) {
       save();
     },
   };
+}
+
+// The graph starts with the sensors of the first thermobeacon graph widget.
+export function defaultsFromLayout(layout) {
+  const graph = layout.widgets.find((w) => w.type === 'thermobeacon.graph');
+  return { graphSensors: graph && graph.sensors ? graph.sensors : [], range: 24 };
+}
+
+let shared = null;
+
+export function getPrefs(layout) {
+  if (!shared) shared = createPrefs(window.localStorage, defaultsFromLayout(layout));
+  return shared;
 }

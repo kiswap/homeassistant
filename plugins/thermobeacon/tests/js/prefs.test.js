@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { createPrefs } from '../../public/js/prefs.js';
+import { createPrefs, defaultsFromLayout } from '../../web/prefs.js';
 
 function fakeStorage(initial = {}) {
   const m = new Map(Object.entries(initial));
@@ -42,4 +42,14 @@ test('prefs survive a throwing storage', () => {
   const p = createPrefs(broken, defaults);
   assert.equal(p.toggleGraphSensor('utazo'), true);
   assert.deepEqual(p.graphSensors().sort(), ['kinti', 'konyha', 'utazo']);
+});
+
+test('prefs defaults come from the first thermobeacon graph widget', () => {
+  const layout = { widgets: [
+    { type: 'thermobeacon.sensor', sensor: 'utazo' },
+    { type: 'thermobeacon.graph', sensors: ['konyha', 'kinti'] },
+    { type: 'thermobeacon.graph', sensors: ['utazo'] },
+  ] };
+  assert.deepEqual(defaultsFromLayout(layout), { graphSensors: ['konyha', 'kinti'], range: 24 });
+  assert.deepEqual(defaultsFromLayout({ widgets: [] }), { graphSensors: [], range: 24 });
 });

@@ -135,16 +135,17 @@ html, body {
   font-size: 15px;
 }
 
-/* ---- collector status ---- */
+/* ---- plugin status line ---- */
 
-.collector {
+.status {
   position: fixed;
   right: 14px;
   bottom: 2px;
   font-size: 12px;
   color: #8a939c;
 }
-.collector.stale { color: #c5221f; font-weight: 600; }
+.status span + span { margin-left: 12px; }
+.status .stale { color: #c5221f; font-weight: 600; }
 
 /* ---- phone and narrow windows: one column, page scrolls ---- */
 
@@ -161,5 +162,5 @@ html, body {
   .temp { font-size: 64px; }
   .hum { font-size: 30px; }
   .bg-icon { font-size: 150px; }
-  .collector { position: static; padding: 0 14px 10px; text-align: right; }
+  .status { position: static; padding: 0 14px 10px; text-align: right; }
 }

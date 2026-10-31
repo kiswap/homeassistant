@@ -1,11 +1,13 @@
 // Temperature (solid) and humidity (dashed) over 24 h, 2 d, or 1 w.
-import { getJson } from '../api.js';
-import { renderChart } from '../chart.js';
+import { getJson } from '../../../js/api.js';
+import { renderChart } from '../../../js/chart.js';
+import { getPrefs } from '../prefs.js';
 
 const RANGES = [[24, '24h'], [48, '2d'], [168, '1w']];
 const PALETTE = ['#d93025', '#188038', '#9334e6', '#e37400', '#00838f'];
 
 export function create(el, cfg, ctx) {
+  const prefs = getPrefs(ctx.layout);
   const sensors = ctx.config.sensors;
   const colors = Object.fromEntries(sensors.map((s, i) => [s.id, PALETTE[i % PALETTE.length]]));
   el.innerHTML = `
@@ -33,19 +35,19 @@ export function create(el, cfg, ctx) {
     b.textContent = label;
     b.dataset.hours = hours;
     b.addEventListener('click', () => {
-      ctx.prefs.setRange(hours);
+      prefs.setRange(hours);
       showRange();
       refresh();
     });
     rangeBox.appendChild(b);
   }
   function showRange() {
-    for (const b of rangeBox.children) b.classList.toggle('on', Number(b.dataset.hours) === ctx.prefs.range());
+    for (const b of rangeBox.children) b.classList.toggle('on', Number(b.dataset.hours) === prefs.range());
   }
   showRange();
 
   // Graph sensors in config order, so colors and legend stay stable.
-  const selected = () => sensors.map((s) => s.id).filter((id) => ctx.prefs.graphSensors().includes(id));
+  const selected = () => sensors.map((s) => s.id).filter((id) => prefs.graphSensors().includes(id));
 
   function draw() {
     legend.innerHTML = '';
@@ -80,7 +82,7 @@ export function create(el, cfg, ctx) {
     try {
       last = ids.length === 0
         ? { series: [] }
-        : await getJson(`api/history?sensors=${ids.map(encodeURIComponent).join(',')}&hours=${ctx.prefs.range()}`);
+        : await getJson(`api/thermobeacon/history?sensors=${ids.map(encodeURIComponent).join(',')}&hours=${prefs.range()}`);
       el.querySelector('.error').textContent = '';
       draw();
     } catch (e) {
