@@ -1,14 +1,15 @@
 # Deploying the home hub to krpi
 
-These steps install the hub on krpi, the Raspberry Pi described in
-`../krpi.md`. You run them by hand. If krpi still runs the old
-thermobeacon server, follow "Moving from the old thermobeacon server"
-instead of the fresh install.
+These steps install and update the hub on krpi, the Raspberry Pi
+described in `../krpi.md`. You run them by hand.
 
 The code reaches krpi only inside a Docker image. The build PC builds the
 image for krpi's ARM CPU and saves it to a file. krpi keeps only three
 things as files in `~/homeassistant/`: `docker-compose.yml`, the
 environment file `.env`, and `config/settings.json`.
+
+The commands below use `krpi` as the SSH host name (an alias in your SSH
+config). On krpi, `docker` runs with `sudo`.
 
 ## What you need
 
@@ -31,19 +32,19 @@ Every install and update starts here, on the build PC, in this repo:
    bash tools/build-image.sh
    ```
 
-   It prints the file name, for example
-   `dist/homeassistant-a49033b.tar.gz` (about 40 MB), and the tag,
-   `a49033b`.
-3. Copy the file to krpi and load it. Replace `pi` and the address with
-   your SSH user and krpi's address:
+   It writes `dist/nobackup/homeassistant-<tag>.tar.gz` (about 40 MB),
+   where `<tag>` is the commit, for example `4c97986`. At the end it
+   prints the two commands for the next step, with the real file name.
+3. Copy the file to krpi and load it:
 
    ```sh
-   scp dist/homeassistant-<tag>.tar.gz pi@<krpi-ip>:~/
-   ssh pi@<krpi-ip> 'docker load -i ~/homeassistant-<tag>.tar.gz'
+   scp dist/nobackup/homeassistant-<tag>.tar.gz krpi:/tmp
+   ssh krpi 'sudo docker load -i /tmp/homeassistant-<tag>.tar.gz && rm /tmp/homeassistant-<tag>.tar.gz'
    ```
 
-   `docker load` prints `Loaded image: homeassistant:<tag>`. The `.tar.gz`
-   file on krpi can be deleted afterwards.
+   `docker load` prints `Loaded image: homeassistant:<tag>` and
+   `Loaded image: homeassistant:latest`. The file carries both tags, so
+   `latest` now points to this version.
 
 ## Fresh install
 
@@ -54,27 +55,28 @@ Every install and update starts here, on the build PC, in this repo:
    settings file:
 
    ```sh
-   scp docker-compose.yml .env.example pi@<krpi-ip>:~/homeassistant/
-   scp config/settings.json pi@<krpi-ip>:~/homeassistant/config/
+   scp docker-compose.yml .env.example krpi:~/homeassistant/
+   scp config/settings.json krpi:~/homeassistant/config/
    ```
 
 4. On krpi, in `~/homeassistant/`, copy `.env.example` to `.env` and set
    the values:
 
    ```sh
-   TAG=<tag>
    PORT=8081
    DATA_DIR=/mnt/usb/thermobeacon
    ```
+
+   Leave `TAG` unset, so the hub runs `homeassistant:latest`.
 
    The hub is published on all of krpi's addresses. The home network can
    use `http://<krpi-ip>:<PORT>/` directly, and nginx forwards to
    `127.0.0.1:<PORT>` (see "Access through nginx" below). The router must
    not forward `<PORT>`.
 
-5. On krpi, in `~/homeassistant/`, run `docker compose up -d`. The service
-   is named `homeassistant`. The container restarts by itself after a
-   reboot.
+5. On krpi, in `~/homeassistant/`, run `sudo docker compose up -d`. The
+   service is named `homeassistant`. The container restarts by itself
+   after a reboot.
 
 6. Point the tablet at the hub:
    - In the ThermoBeacon app, set the server URL to
@@ -89,69 +91,21 @@ Every install and update starts here, on the build PC, in this repo:
 
 1. Build, copy, and load the new image as above.
 2. If `docker-compose.yml` changed in git, copy it to krpi again.
-3. On krpi, in `~/homeassistant/`, set `TAG=<new tag>` in `.env`, then run
-   `docker compose up -d`. Compose replaces the container; the data and
-   the settings stay.
+3. On krpi, in `~/homeassistant/`, run `sudo docker compose up -d`.
+   Compose sees that `latest` points to a new image and replaces the
+   container. The data and the settings stay.
 
-To go back, set the old tag in `.env` and run `docker compose up -d`
-again. `docker images homeassistant` lists the versions krpi has.
-
-## Moving from the old thermobeacon server
-
-The old server runs from `~/thermobeacon/` and nginx serves it under
-`/thermobeacon/`. The hub uses the same port, the same data folder, and
-the same database file, so the stored readings stay.
-
-1. Build, copy, and load an image as above.
-2. On krpi, create `~/homeassistant/config`. From the build PC, copy
-   `docker-compose.yml` to `~/homeassistant/` (not the settings file).
-3. On krpi, write the hub's settings file from the old one. The
-   conversion tool is inside the image:
-
-   ```sh
-   cd ~/homeassistant
-   docker run --rm -v "$HOME/thermobeacon/config:/old:ro" homeassistant:<tag> \
-     php tools/convert-settings.php /old/settings.json \
-     > config/settings.new.json \
-     && mv config/settings.new.json config/settings.json
-   ```
-
-   The output goes to a new file first, so a failed conversion never
-   leaves an empty `config/settings.json`. If the command prints an
-   error, fix the old file and run it again.
-
-   The script keeps the API key, the sensors, and the layout. It drops
-   `home_networks` and `basic_auth`, which nginx replaced.
-4. Copy `~/thermobeacon/.env` to `~/homeassistant/.env`, and add the line
-   `TAG=<tag>`. The `PORT` and `DATA_DIR` values stay the same.
-5. Switch the containers. The tablet cannot upload between this step and
-   step 7, but the app keeps its readings in its queue for up to 7 days,
-   so nothing is lost.
-
-   ```sh
-   cd ~/thermobeacon && docker compose down
-   cd ~/homeassistant && docker compose up -d
-   ```
-
-6. In the nginx config, rename `location /thermobeacon/` to
-   `location /homeassistant/`. Everything else in the block stays. Then
-   run `sudo nginx -t && sudo systemctl reload nginx`.
-7. On the tablet, set the app's server URL to
-   `http://<krpi-ip>/homeassistant` and the Fully Kiosk start URL to
-   `http://<krpi-ip>/homeassistant/`.
-8. Check that the dashboard shows the old history, and that new readings
-   arrive within two minutes (see the checks below).
-
-To go back: in `~/homeassistant/` run `docker compose down`, in
-`~/thermobeacon/` run `docker compose up -d`, restore the nginx block's
-old name, and set the old URLs on the tablet. The old `~/thermobeacon/`
-folder stays on krpi until you delete it.
+To go back to an older version, set `TAG=<old tag>` in `.env` and run
+`sudo docker compose up -d`. Remove the `TAG` line again to return to
+`latest`. `sudo docker images homeassistant` lists the versions krpi has.
 
 ## Checks to run and report back
 
-Run these on krpi unless stated otherwise:
+These checks passed on krpi on 2026-10-31, after the move from the old
+thermobeacon server. Run them again after a fresh install. Run them on
+krpi unless stated otherwise:
 
-1. `docker compose ps` shows the `homeassistant` service as running.
+1. `sudo docker compose ps` shows the `homeassistant` service as running.
 2. `curl -s http://127.0.0.1:<PORT>/api/config` prints JSON that starts
    with `{"refresh_seconds":60`.
 3. `ls -l /mnt/usb/thermobeacon` shows `thermobeacon.sqlite`.
@@ -219,7 +173,7 @@ The thermobeacon history is one file. Copy it while the hub runs with
 SQLite's own backup command, so the copy is consistent:
 
 ```sh
-docker compose exec homeassistant php -r '
+sudo docker compose exec homeassistant php -r '
   $db = new SQLite3("/data/thermobeacon.sqlite");
   $db->exec("VACUUM INTO \"/data/backup-" . date("Ymd") . ".sqlite\"");'
 ```
@@ -228,6 +182,6 @@ Then copy `backup-YYYYMMDD.sqlite` from the USB stick to another machine.
 
 ## Logs
 
-`docker compose logs --tail 50` shows errors. The log is limited to two
+`sudo docker compose logs --tail 50` shows errors. The log is limited to two
 files of 1 MB each, and the server writes no line per request, so the SD
 card is not worn out.

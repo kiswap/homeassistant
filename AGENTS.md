@@ -33,7 +33,7 @@ The design of the split is in
   API key). `config/settings.example.json` is the committed template.
 - `tools/seed.php` fills a database with fake thermobeacon history.
   `tools/convert-settings.php` converts a settings file from before the
-  hub split.
+  hub split (krpi no longer needs it; it is kept for an old backup).
 
 ## Plugins
 
@@ -102,9 +102,11 @@ Run from this folder:
   settings, data, and docs out. The Dockerfile must stay free of `RUN`
   steps: then the laptop builds the ARMv6 image without ARM emulation,
   which is not installed.
-- `tools/build-image.sh` builds `homeassistant:<git hash>` for
-  `linux/arm/v6` and saves it gzipped to `dist/` (git-ignored, about
-  40 MB). `TAG` in krpi's environment file picks the version.
+- `tools/build-image.sh` builds `homeassistant:<git hash>` and
+  `homeassistant:latest` for `linux/arm/v6` and saves both tags, gzipped,
+  to `dist/nobackup/` (git-ignored, about 40 MB). After `docker load` on
+  krpi, the compose file runs `latest`. `TAG` in krpi's environment file
+  is set only to go back to an older version.
 - The smoke test builds the image for this PC and runs it with the
   production compose file, so it covers the Dockerfile too.
 

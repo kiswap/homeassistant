@@ -1,9 +1,10 @@
 # Runs the hub from its image. On krpi this file sits next to the env file
 # and config/settings.json; the code itself is only in the image. The image
-# comes from tools/build-image.sh, and TAG picks its version (see DEPLOY.md).
+# comes from tools/build-image.sh. It runs the newest loaded image (latest)
+# unless TAG names an older one (see DEPLOY.md).
 services:
   homeassistant:
-    image: homeassistant:${TAG:?set TAG to the image tag}
+    image: homeassistant:${TAG:-latest}
     # Published on all of krpi's addresses, so the home network can also use
     # the port directly. The router does not forward it. Access from outside
     # goes through the nginx reverse proxy on krpi, under /homeassistant/.
