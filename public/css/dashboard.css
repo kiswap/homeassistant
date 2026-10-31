@@ -78,7 +78,7 @@ html, body {
 
 .temp {
   margin-top: auto;
-  font-size: min(7.5vw, 13vh);
+  font-size: min(7.5vw, 10vh);
   font-weight: 700;
   line-height: 1;
   letter-spacing: -1px;
@@ -87,7 +87,7 @@ html, body {
 
 .hum {
   margin-top: 6px;
-  font-size: min(3.6vw, 6.2vh);
+  font-size: min(3.6vw, 4.8vh);
   font-weight: 600;
   color: #1a62c9;
 }
@@ -127,14 +127,16 @@ html, body {
 
 /* ---- weather forecast widget ---- */
 
+.w-forecast { padding: 10px 14px 8px; }
 .fc-now { margin-left: auto; font-size: 22px; color: #1d2329; }
 
+/* No gap between the columns: the temperature curve assumes each block
+   is exactly 1/8 of the width. */
 .fc-cols {
   flex: 1;
   min-height: 0;
   display: flex;
-  gap: 6px;
-  margin-top: 8px;
+  margin-top: 2px;
 }
 
 .fc-col {
@@ -146,7 +148,7 @@ html, body {
   text-align: center;
 }
 
-.fc-icon { font-size: min(3.2vw, 5vh); line-height: 1.2; }
+.fc-icon { font-size: min(2.6vw, 3.8vh); line-height: 1.15; }
 
 .fc-bar-area {
   flex: 1;
@@ -159,7 +161,7 @@ html, body {
   border-bottom: 2px solid #c3cad2;
 }
 
-.fc-mm { font-size: 15px; font-weight: 600; color: #1a62c9; }
+.fc-mm { font-size: 13px; font-weight: 600; color: #1a62c9; }
 
 .fc-bar {
   width: 70%;
@@ -167,11 +169,24 @@ html, body {
   border-radius: 4px 4px 0 0;
 }
 
-.fc-hour { margin-top: 4px; font-size: 15px; color: #4a525b; }
-.fc-prob { font-size: 17px; font-weight: 600; }
+.fc-hour { margin-top: 2px; font-size: 13px; line-height: 1.2; color: #4a525b; }
+.fc-prob { font-size: 15px; line-height: 1.2; font-weight: 600; }
 .fc-prob.p-lo { color: #9aa0a6; font-weight: 500; }
 .fc-prob.p-mid { color: #3f8cff; }
 .fc-prob.p-hi { color: #1a4fa8; }
+.fc-updated { margin-left: 10px; font-size: 12px; font-weight: 400; color: #8a939c; }
+
+.fc-temp { position: absolute; left: 0; top: 0; pointer-events: none; overflow: visible; }
+.fc-temp path { fill: none; stroke: #e8710a; stroke-width: 2.5; }
+.fc-temp text {
+  font-size: 12px;
+  font-weight: 600;
+  fill: #b85600;
+  text-anchor: middle;
+  paint-order: stroke;
+  stroke: #fff;
+  stroke-width: 3px;
+}
 
 /* ---- weather radar widget ---- */
 

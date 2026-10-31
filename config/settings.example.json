@@ -22,14 +22,13 @@
   },
   "layout": {
     "columns": 4,
-    "rows": ["1fr", "1.7fr"],
+    "rows": ["1.25fr", "1fr", "1fr", "1.15fr"],
     "widgets": [
-      {"type": "thermobeacon.sensor", "sensor": "utazo",  "col": 1, "row": 1},
-      {"type": "thermobeacon.sensor", "sensor": "konyha", "col": 2, "row": 1},
-      {"type": "thermobeacon.sensor", "sensor": "kinti",  "col": 3, "row": 1},
-      {"type": "weather.radar", "col": 4, "row": 1},
-      {"type": "thermobeacon.graph", "sensors": ["konyha", "kinti"], "col": 1, "row": 2, "colSpan": 2},
-      {"type": "weather.forecast", "col": 3, "row": 2, "colSpan": 2}
+      {"type": "thermobeacon.sensor", "sensor": "konyha", "col": 1, "row": 1},
+      {"type": "thermobeacon.sensor", "sensor": "kinti",  "col": 2, "row": 1},
+      {"type": "weather.radar", "col": 3, "row": 1, "colSpan": 2, "rowSpan": 3},
+      {"type": "thermobeacon.graph", "sensors": ["konyha", "kinti"], "col": 1, "row": 2, "colSpan": 2, "rowSpan": 3},
+      {"type": "weather.forecast", "col": 3, "row": 4, "colSpan": 2}
     ]
   }
 }

@@ -28,8 +28,11 @@ function w_body(Response $r): array
     return json_decode($r->body, true);
 }
 
-/** Open-Meteo's answer: 27 hours from 15:00 local time, as unix times. */
-function w_open_meteo(): string
+/**
+ * Open-Meteo's answer: 27 hours from 15:00 local time, as unix times. The
+ * sun sets at 16:25 and rises at 06:30, unless $sun is false.
+ */
+function w_open_meteo(bool $sun = true): string
 {
     $start = W_NOW - 2 * 3600 - 40 * 60; // 15:00 local
     $hourly = ['time' => [], 'precipitation' => [], 'precipitation_probability' => [], 'weather_code' => [], 'is_day' => []];
@@ -39,11 +42,16 @@ function w_open_meteo(): string
         $hourly['precipitation_probability'][] = $i === 1 ? 70 : 10;
         $hourly['weather_code'][] = $i === 2 ? 61 : 3;
         $hourly['is_day'][] = $i < 2 ? 1 : 0;
+        $hourly['temperature_2m'][] = 10.0 + $i / 2;
     }
+    $daily = [
+        'sunrise' => [$start - 8.5 * 3600, $start + 15.5 * 3600],
+        'sunset' => [$start + 85 * 60, $start + 24 * 3600 + 85 * 60],
+    ];
     return json_encode([
         'current' => ['temperature_2m' => 12.5, 'weather_code' => 3, 'is_day' => 0],
         'hourly' => $hourly,
-    ]);
+    ] + ($sun ? ['daily' => $daily] : []));
 }
 
 function test_settings_need_coordinates(): void
@@ -78,11 +86,23 @@ function test_forecast_groups_hours_into_3_hour_blocks(): void
     assert_eq(1.2, $first['mm'], 'sum of the 3 hours');
     assert_eq(70, $first['probability'], 'highest of the 3 hours');
     assert_eq(61, $first['code'], 'worst weather code');
-    assert_eq(true, $first['is_day'], 'the middle hour is day');
+    assert_eq(false, $first['is_day'], 'from 17:40 to 18:00 the sun is down');
     assert_eq(18, $data['blocks'][1]['hour']);
     assert_eq(0.0, (float)$data['blocks'][1]['mm']);
     assert_eq(false, $data['blocks'][1]['is_day']);
     assert_eq(12, $data['blocks'][7]['hour']);
+    assert_eq(true, $data['blocks'][5]['is_day'], '06-09: sun up from 06:30');
+    assert_eq(true, $data['blocks'][7]['is_day'], '12-15');
+    assert_eq(24, count($data['temperatures']), 'one per hour of the 8 blocks');
+    assert_eq(['ts' => W_NOW - 2 * 3600 - 40 * 60, 'c' => 10], $data['temperatures'][0]);
+}
+
+function test_forecast_without_sun_times_uses_the_middle_hour(): void
+{
+    $plugin = new WeatherPlugin(w_section(w_cache_dir()), fn(string $url) => w_open_meteo(false));
+    $data = w_body(w_call($plugin, '/api/weather/forecast'));
+    assert_eq(true, $data['blocks'][0]['is_day']);
+    assert_eq(false, $data['blocks'][1]['is_day']);
 }
 
 function test_forecast_is_cached(): void

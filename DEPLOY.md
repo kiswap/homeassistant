@@ -33,9 +33,11 @@ Every install and update starts here, on the build PC, in this repo:
    ```
 
    It writes `dist/nobackup/homeassistant-<tag>.tar.gz` (about 40 MB),
-   where `<tag>` is the commit, for example `4c97986`. At the end it
-   prints the two commands for the next step, with the real file name.
-3. Copy the file to krpi and load it:
+   where `<tag>` is the commit, for example `4c97986`. Then it copies the
+   file to krpi, loads it, and runs `sudo docker compose up -d` in
+   `/var/www/html/homeassistant` on krpi.
+3. The script does this step itself. To do it by hand, copy the file to
+   krpi and load it:
 
    ```sh
    scp dist/nobackup/homeassistant-<tag>.tar.gz krpi:/tmp

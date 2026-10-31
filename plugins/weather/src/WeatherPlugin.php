@@ -77,8 +77,10 @@ final class WeatherPlugin implements Plugin
         $url = self::FORECAST_URL . '?' . http_build_query([
             'latitude' => $s['latitude'],
             'longitude' => $s['longitude'],
-            'hourly' => 'precipitation,precipitation_probability,weather_code,is_day',
+            'hourly' => 'precipitation,precipitation_probability,weather_code,is_day,temperature_2m',
             'current' => 'temperature_2m,weather_code,is_day',
+            'daily' => 'sunrise,sunset',
+            'forecast_days' => 3,
             'timezone' => $s['timezone'],
             'timeformat' => 'unixtime',
             // The current block may have started up to two hours ago.
@@ -101,8 +103,7 @@ final class WeatherPlugin implements Plugin
                 'code' => $current['weather_code'] ?? null,
                 'is_day' => (bool)($current['is_day'] ?? 1),
             ],
-            'blocks' => self::blocks($data['hourly'] ?? [], $now, new DateTimeZone($s['timezone'])),
-        ]);
+        ] + self::blocks($data['hourly'] ?? [], $data['daily'] ?? [], $now, new DateTimeZone($s['timezone'])));
     }
 
     /**
@@ -110,8 +111,12 @@ final class WeatherPlugin implements Plugin
      * 0, 3, 6, ... o'clock local time, from the block that holds $now.
      * mm is the sum of the hours, probability the highest, and code the
      * highest weather code (higher WMO codes mean worse weather).
+     * A block is day when the sun is up for most of its time from now on.
+     * Also returns the hourly temperatures of the blocks, for the curve.
+     *
+     * @return array{blocks: array, temperatures: array}
      */
-    public static function blocks(array $hourly, int $now, DateTimeZone $tz): array
+    public static function blocks(array $hourly, array $daily, int $now, DateTimeZone $tz): array
     {
         $blockStart = function (int $ts) use ($tz): int {
             $local = (new DateTimeImmutable("@$ts"))->setTimezone($tz);
@@ -130,27 +135,57 @@ final class WeatherPlugin implements Plugin
                 'probability' => $hourly['precipitation_probability'][$i] ?? null,
                 'code' => $hourly['weather_code'][$i] ?? null,
                 'is_day' => $hourly['is_day'][$i] ?? null,
+                'ts' => (int)$ts,
+                'temperature' => $hourly['temperature_2m'][$i] ?? null,
             ];
         }
         ksort($groups);
         $blocks = [];
+        $temperatures = [];
         foreach (array_slice($groups, 0, self::BLOCKS, true) as $start => $hours) {
+            foreach ($hours as $h) {
+                if ($h['temperature'] !== null) {
+                    $temperatures[] = ['ts' => $h['ts'], 'c' => $h['temperature']];
+                }
+            }
             $values = fn(string $key) => array_values(array_filter(array_column($hours, $key), fn($v) => $v !== null));
             $mm = $values('mm');
             $probability = $values('probability');
             $code = $values('code');
             $isDay = $values('is_day');
+            $from = max($start, $now);
+            $to = $start + count($hours) * 3600;
+            $daylight = self::daylight($daily, $from, $to);
             $blocks[] = [
                 'start' => $start,
                 'hour' => (int)(new DateTimeImmutable("@$start"))->setTimezone($tz)->format('G'),
                 'mm' => $mm === [] ? null : round(array_sum($mm), 1),
                 'probability' => $probability === [] ? null : (int)max($probability),
                 'code' => $code === [] ? null : (int)max($code),
-                // The middle hour decides between sun and moon.
-                'is_day' => $isDay === [] ? true : (bool)$isDay[intdiv(count($isDay), 2)],
+                // Without sunrise and sunset times, the middle hour decides.
+                'is_day' => $daylight !== null
+                    ? 2 * $daylight >= $to - $from
+                    : ($isDay === [] ? true : (bool)$isDay[intdiv(count($isDay), 2)]),
             ];
         }
-        return $blocks;
+        return ['blocks' => $blocks, 'temperatures' => $temperatures];
+    }
+
+    /** Seconds of daylight between $from and $to, or null without sunrise times. */
+    private static function daylight(array $daily, int $from, int $to): ?int
+    {
+        $rises = $daily['sunrise'] ?? [];
+        if ($rises === []) {
+            return null;
+        }
+        $seconds = 0;
+        foreach ($rises as $i => $rise) {
+            $set = $daily['sunset'][$i] ?? null;
+            if ($rise !== null && $set !== null) {
+                $seconds += max(0, min($to, (int)$set) - max($from, (int)$rise));
+            }
+        }
+        return $seconds;
     }
 
     /**

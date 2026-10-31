@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Builds the hub's image for krpi (Raspberry Pi Model B, ARMv6) and saves it
-# to dist/nobackup/homeassistant-<tag>.tar.gz for copying to krpi. The tag is
+# Builds the hub's image for krpi (Raspberry Pi Model B, ARMv6), saves it
+# to dist/nobackup/homeassistant-<tag>.tar.gz, copies it to krpi, loads it
+# there, and restarts the hub in /var/www/html/homeassistant. The tag is
 # the git commit, with "-dirty" when there are uncommitted changes. The file
 # also carries the tag "latest", so after docker load on krpi the compose
 # file runs this version without a change to the env file.
@@ -20,5 +21,9 @@ docker buildx build --platform linux/arm/v6 --load -t "homeassistant:$TAG" -t ho
 docker save "homeassistant:$TAG" homeassistant:latest | gzip > "$OUT"
 echo "built $OUT ($(du -h "$OUT" | cut -f1))"
 #echo "on krpi: docker load -i homeassistant-$TAG.tar.gz, then set TAG=$TAG"
-echo "scp $OUT krpi:/tmp"
-echo "ssh krpi 'sudo docker load -i /tmp/homeassistant-$TAG.tar.gz && rm /tmp/homeassistant-$TAG.tar.gz'"
+echo "Copying to krpi..."
+scp "$OUT" krpi:/tmp
+echo "Loading in krpi..."
+# Double quotes: $TAG is filled in here, not on krpi.
+ssh krpi "sudo docker load -i /tmp/homeassistant-$TAG.tar.gz && rm /tmp/homeassistant-$TAG.tar.gz && cd /var/www/html/homeassistant && sudo docker compose up -d"
+

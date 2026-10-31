@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {
-  weatherIcon, scaleMax, barPercent, formatMm, formatProbability, probabilityClass,
+  weatherIcon, scaleMax, barPercent, formatMm, formatProbability, probabilityClass, smoothPath,
 } from '../../web/weather.js';
 
 test('weatherIcon by WMO code', () => {
@@ -27,10 +27,18 @@ test('barPercent', () => {
   assert.equal(barPercent(9, 2), 100);
 });
 
-test('formatMm hides traces', () => {
+test('formatMm shows 0 for no rain', () => {
   assert.equal(formatMm(1.24), '1.2');
-  assert.equal(formatMm(0.04), '');
+  assert.equal(formatMm(0.1), '0.1');
+  assert.equal(formatMm(0.04), '0');
+  assert.equal(formatMm(0), '0');
   assert.equal(formatMm(null), '');
+});
+
+test('smoothPath passes through every point', () => {
+  assert.equal(smoothPath([{ x: 0, y: 5 }]), 'M0.0 5.0');
+  const d = smoothPath([{ x: 0, y: 0 }, { x: 10, y: 10 }, { x: 20, y: 0 }]);
+  assert.match(d, /^M0\.0 0\.0 C[^C]+ 10\.0 10\.0 C[^C]+ 20\.0 0\.0$/);
 });
 
 test('probability text and class', () => {
