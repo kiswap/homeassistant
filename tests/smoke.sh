@@ -49,6 +49,10 @@ check "post with key stores" '"stored":1' "$(curl -s -X POST -H "X-Api-Key: $KEY
 check "sensor shows reading" "\"ts\":$NOW" "$(curl -s "$BASE/api/thermobeacon/sensors?id=konyha")"
 check "index served" "200" "$(curl -s -o /dev/null -w '%{http_code}' "$BASE/")"
 check "plugin js served" "application/javascript" "$(curl -sI "$BASE/plugins/thermobeacon/widgets/sensor.js")"
+FUTURE="{\"readings\":[{\"address\":\"70:F7:00:00:14:63\",\"ts\":$((NOW + 3600)),\"temperature_c\":22.5,\"humidity_pct\":63.9,\"voltage_mv\":2930,\"battery_pct\":93}]}"
+check "future reading 503" "503" "$(curl -s -o /dev/null -w '%{http_code}' -X POST -H "X-Api-Key: $KEY" -d "$FUTURE" "$BASE/api/readings")"
+sleep 0.5
+check "error_log reaches docker logs" "reading from the future" "$(compose logs 2>&1)"
 check "db on data dir" "thermobeacon.sqlite" "$(ls "$TMP")"
 LAN_IP="$(hostname -I | awk '{print $1}')"
 check "published on $LAN_IP" "200" "$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://$LAN_IP:$PORT/" || true)"

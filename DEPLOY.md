@@ -64,15 +64,21 @@ The old server runs from `~/thermobeacon/` and nginx serves it under
 the same database file, so the stored readings stay.
 
 1. Copy the files to `~/homeassistant/` as in step 1 of the fresh install,
-   but without a `config/settings.json`.
+   but add `--exclude config/settings.json` to the `rsync` command. The
+   settings file is written on krpi in the next step.
 2. On krpi, write the hub's settings file from the old one:
 
    ```sh
    cd ~/homeassistant
    docker run --rm -v "$HOME:/h" -w /h/homeassistant php:8.5-cli-alpine \
      php tools/convert-settings.php /h/thermobeacon/config/settings.json \
-     > config/settings.json
+     > config/settings.new.json \
+     && mv config/settings.new.json config/settings.json
    ```
+
+   The output goes to a new file first, so a failed conversion never
+   leaves an empty `config/settings.json`. If the command prints an
+   error, fix the old file and run it again.
 
    The script keeps the API key, the sensors, and the layout. It drops
    `home_networks` and `basic_auth`, which nginx replaced.

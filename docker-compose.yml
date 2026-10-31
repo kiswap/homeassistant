@@ -17,7 +17,9 @@ services:
     # display_errors=0: PHP warnings go to the container log only. Printed
     # warnings would come before the headers, and every answer would turn
     # into "200 OK".
-    command: ["sh", "-c", "exec php -q -d display_errors=0 -d log_errors=1 -S 0.0.0.0:8080 -t /app/public /app/router.php"]
+    # error_log=/proc/self/fd/2: with -q, php -S drops error_log() lines
+    # unless they go to a file, so they are sent to stderr explicitly.
+    command: ["sh", "-c", "exec php -q -d display_errors=0 -d log_errors=1 -d error_log=/proc/self/fd/2 -S 0.0.0.0:8080 -t /app/public /app/router.php"]
     logging:
       driver: json-file
       options:
