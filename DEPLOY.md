@@ -5,8 +5,8 @@ described in `../krpi.md`. You run them by hand.
 
 The code reaches krpi only inside a Docker image. The build PC builds the
 image for krpi's ARM CPU and saves it to a file. krpi keeps only three
-things as files in `~/homeassistant/`: `docker-compose.yml`, the
-environment file `.env`, and `config/settings.json`.
+things as files in `/var/www/html/homeassistant/`: `docker-compose.yml`,
+the environment file `.env`, and `config/settings.json`.
 
 The commands below use `krpi` as the SSH host name (an alias in your SSH
 config). On krpi, `docker` runs with `sudo`.
@@ -51,18 +51,19 @@ Every install and update starts here, on the build PC, in this repo:
 ## Fresh install
 
 1. Build, copy, and load an image as above.
-2. On krpi, create the folders: `mkdir -p ~/homeassistant/config` and
+2. On krpi, create the folders:
+   `mkdir -p /var/www/html/homeassistant/config` and
    `sudo mkdir -p /mnt/usb/thermobeacon`.
 3. From the build PC, copy the compose file, the env template, and the
    settings file:
 
    ```sh
-   scp docker-compose.yml .env.example krpi:~/homeassistant/
-   scp config/settings.json krpi:~/homeassistant/config/
+   scp docker-compose.yml .env.example krpi:/var/www/html/homeassistant/
+   scp config/settings.json krpi:/var/www/html/homeassistant/config/
    ```
 
-4. On krpi, in `~/homeassistant/`, copy `.env.example` to `.env` and set
-   the values:
+4. On krpi, in `/var/www/html/homeassistant/`, copy `.env.example` to
+   `.env` and set the values:
 
    ```sh
    PORT=8081
@@ -76,9 +77,9 @@ Every install and update starts here, on the build PC, in this repo:
    `127.0.0.1:<PORT>` (see "Access through nginx" below). The router must
    not forward `<PORT>`.
 
-5. On krpi, in `~/homeassistant/`, run `sudo docker compose up -d`. The
-   service is named `homeassistant`. The container restarts by itself
-   after a reboot.
+5. On krpi, in `/var/www/html/homeassistant/`, run
+   `sudo docker compose up -d`. The service is named `homeassistant`.
+   The container restarts by itself after a reboot.
 
 6. Point the tablet at the hub:
    - In the ThermoBeacon app, set the server URL to
@@ -93,9 +94,9 @@ Every install and update starts here, on the build PC, in this repo:
 
 1. Build, copy, and load the new image as above.
 2. If `docker-compose.yml` changed in git, copy it to krpi again.
-3. On krpi, in `~/homeassistant/`, run `sudo docker compose up -d`.
-   Compose sees that `latest` points to a new image and replaces the
-   container. The data and the settings stay.
+3. On krpi, in `/var/www/html/homeassistant/`, run
+   `sudo docker compose up -d`. Compose sees that `latest` points to a
+   new image and replaces the container. The data and the settings stay.
 
 To go back to an older version, set `TAG=<old tag>` in `.env` and run
 `sudo docker compose up -d`. Remove the `TAG` line again to return to
