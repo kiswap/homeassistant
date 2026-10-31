@@ -5,7 +5,7 @@
 
 declare(strict_types=1);
 
-foreach (glob(__DIR__ . '/../src/*.php') as $file) {
+foreach ([...glob(__DIR__ . '/../core/*.php'), ...glob(__DIR__ . '/../plugins/thermobeacon/src/*.php')] as $file) {
     require_once $file;
 }
 
@@ -13,7 +13,9 @@ if ($argc !== 3) {
     fwrite(STDERR, "usage: php tools/seed.php <settings.json> <days>\n");
     exit(2);
 }
-$settings = Settings::load($argv[1]);
+// Only the thermobeacon section is used. Its checks run in ThermobeaconPlugin.
+$settings = Settings::load($argv[1])['plugins']['thermobeacon'];
+new ThermobeaconPlugin($settings);
 $days = (int)$argv[2];
 $store = new ReadingStore(Db::open($settings['db_path']));
 $now = intdiv(time(), 60) * 60;

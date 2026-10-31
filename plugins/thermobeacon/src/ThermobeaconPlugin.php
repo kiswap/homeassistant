@@ -2,38 +2,85 @@
 
 declare(strict_types=1);
 
-final class Api
+/**
+ * Receives the readings that the ThermoBeacon collector app on the tablet
+ * uploads, stores them in SQLite, and serves them to the dashboard. The
+ * app's request format is in ../thermobeacon/docs/upload-format.md.
+ */
+final class ThermobeaconPlugin implements Plugin
 {
     public const MAX_BATCH = 500;
     public const MAX_FUTURE_SECONDS = 300;
     /** Graph range in hours => bucket size in seconds (about 300 points). */
     public const RANGES = [24 => 300, 48 => 600, 168 => 1800];
+    private const REQUIRED = ['api_key', 'db_path', 'sensors'];
 
-    /**
-     * Handles one request. Returns null for non-API paths, so the caller
-     * serves the static file. The password for access from outside is
-     * checked by nginx on krpi, not here.
-     */
-    public static function handle(Request $req, array $settings, ReadingStore $store, int $now): ?Response
+    private array $section;
+
+    /** The store is opened on first use when none is given (tests pass one). */
+    public function __construct(array $section, private ?ReadingStore $store = null)
     {
-        if (!str_starts_with($req->path, '/api/')) {
-            return null;
+        foreach (self::REQUIRED as $key) {
+            if (!array_key_exists($key, $section)) {
+                throw new RuntimeException("settings: plugins.thermobeacon: missing key $key");
+            }
         }
-        return match ($req->path) {
-            '/api/readings' => $req->method === 'POST'
-                ? self::postReadings($req, $settings, $store, $now)
-                : Response::json(405, ['error' => 'use POST']),
-            '/api/config' => self::config($settings),
-            '/api/sensors' => self::sensors($req, $settings, $store, $now),
-            '/api/history' => self::history($req, $settings, $store, $now),
-            default => Response::json(404, ['error' => 'not found']),
-        };
+        $section['stale_after_seconds'] ??= 600;
+        foreach ($section['sensors'] as $i => $sensor) {
+            foreach (['id', 'name', 'address'] as $field) {
+                if (!isset($sensor[$field])) {
+                    throw new RuntimeException("settings: plugins.thermobeacon: sensors[$i] needs $field");
+                }
+            }
+            $section['sensors'][$i]['address'] = strtoupper($sensor['address']);
+            $section['sensors'][$i]['icon'] ??= '';
+        }
+        $this->section = $section;
     }
 
-    private static function postReadings(Request $req, array $settings, ReadingStore $store, int $now): Response
+    public function routes(): array
+    {
+        // The app posts to /api/readings, so that path stays as it was.
+        $readings = fn(Request $req, int $now) => $req->method === 'POST'
+            ? $this->postReadings($req, $now)
+            : Response::json(405, ['error' => 'use POST']);
+        return [
+            '/api/readings' => $readings,
+            '/api/thermobeacon/readings' => $readings,
+            '/api/thermobeacon/sensors' => $this->sensors(...),
+            '/api/thermobeacon/history' => $this->history(...),
+        ];
+    }
+
+    public function publicConfig(): array
+    {
+        return [
+            'stale_after_seconds' => $this->section['stale_after_seconds'],
+            'sensors' => array_map(self::publicSensor(...), $this->section['sensors']),
+        ];
+    }
+
+    /** Map of upper-case BLE address to sensor settings. */
+    public function sensorByAddress(): array
+    {
+        return array_column($this->section['sensors'], null, 'address');
+    }
+
+    /** Map of sensor id to sensor settings. */
+    public function sensorById(): array
+    {
+        return array_column($this->section['sensors'], null, 'id');
+    }
+
+    private function store(): ReadingStore
+    {
+        return $this->store ??= new ReadingStore(Db::open($this->section['db_path']));
+    }
+
+    private function postReadings(Request $req, int $now): Response
     {
         $key = $req->headers['x-api-key'] ?? '';
-        if (!hash_equals((string)$settings['api_key'], $key)) {
+        if (!hash_equals((string)$this->section['api_key'], $key)) {
             return Response::json(401, ['error' => 'bad api key']);
         }
         $data = json_decode($req->body, true);
@@ -55,7 +102,8 @@ final class Api
             }
         }
 
-        $known = Settings::sensorByAddress($settings);
+        $known = $this->sensorByAddress();
+        $store = $this->store();
         $counts = ['stored' => 0, 'duplicates' => 0, 'ignored' => 0, 'rejected' => 0];
         $store->transaction(function () use ($data, $known, $store, $now, &$counts) {
             foreach ($data['readings'] as $r) {
@@ -108,21 +156,12 @@ final class Api
         return ['id' => $sensor['id'], 'name' => $sensor['name'], 'icon' => $sensor['icon']];
     }
 
-    private static function config(array $settings): Response
+    private function sensors(Request $req, int $now): Response
     {
-        return Response::json(200, [
-            'refresh_seconds' => $settings['refresh_seconds'],
-            'stale_after_seconds' => $settings['stale_after_seconds'],
-            'layout' => $settings['layout'],
-            'sensors' => array_map(self::publicSensor(...), $settings['sensors']),
-        ]);
-    }
-
-    private static function sensors(Request $req, array $settings, ReadingStore $store, int $now): Response
-    {
-        $sensors = $settings['sensors'];
+        $sensors = $this->section['sensors'];
+        $store = $this->store();
         if (isset($req->query['id'])) {
-            $byId = Settings::sensorById($settings);
+            $byId = $this->sensorById();
             if (!isset($byId[$req->query['id']])) {
                 return Response::json(400, ['error' => 'unknown sensor id']);
             }
@@ -139,13 +178,13 @@ final class Api
         ]);
     }
 
-    private static function history(Request $req, array $settings, ReadingStore $store, int $now): Response
+    private function history(Request $req, int $now): Response
     {
         $hours = (int)($req->query['hours'] ?? 0);
         if (!isset(self::RANGES[$hours])) {
             return Response::json(400, ['error' => 'hours must be 24, 48 or 168']);
         }
-        $byId = Settings::sensorById($settings);
+        $byId = $this->sensorById();
         $ids = array_values(array_filter(explode(',', (string)($req->query['sensors'] ?? ''))));
         foreach ($ids as $id) {
             if (!isset($byId[$id])) {
@@ -159,7 +198,7 @@ final class Api
             'to' => $now,
             'bucket_seconds' => $bucket,
             'series' => array_map(
-                fn(string $id) => ['id' => $id, 'points' => $store->history($byId[$id]['address'], $from, $bucket)],
+                fn(string $id) => ['id' => $id, 'points' => $this->store()->history($byId[$id]['address'], $from, $bucket)],
                 $ids,
             ),
         ]);

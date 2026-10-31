@@ -1,10 +1,11 @@
 <?php
 // Minimal test runner: php tests/run.php
-// Loads every tests/*Test.php and runs every function named test_*.
+// Loads every tests/*Test.php and plugins/*/tests/*Test.php and runs
+// every function named test_*.
 
 declare(strict_types=1);
 
-foreach (glob(__DIR__ . '/../src/*.php') as $file) {
+foreach ([...glob(__DIR__ . '/../core/*.php'), ...glob(__DIR__ . '/../plugins/*/src/*.php')] as $file) {
     require_once $file;
 }
 
@@ -30,7 +31,7 @@ function assert_true(bool $value, string $msg = ''): void
 }
 
 $before = get_defined_functions()['user'];
-foreach (glob(__DIR__ . '/*Test.php') as $file) {
+foreach ([...glob(__DIR__ . '/*Test.php'), ...glob(__DIR__ . '/../plugins/*/tests/*Test.php')] as $file) {
     require_once $file;
 }
 $tests = array_filter(

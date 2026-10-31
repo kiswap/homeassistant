@@ -4,7 +4,22 @@ declare(strict_types=1);
 
 final class ReadingStore
 {
-    public function __construct(private PDO $pdo) {}
+    /** Creates the tables if needed. Their shape is the same as before the hub split. */
+    public function __construct(private PDO $pdo)
+    {
+        $this->pdo->exec(
+            'CREATE TABLE IF NOT EXISTS readings (
+                address TEXT NOT NULL,
+                ts INTEGER NOT NULL,
+                temperature_c REAL NOT NULL,
+                humidity_pct REAL NOT NULL,
+                voltage_mv INTEGER,
+                battery_pct INTEGER,
+                PRIMARY KEY (address, ts)
+            ) WITHOUT ROWID'
+        );
+        $this->pdo->exec('CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL)');
+    }
 
     /**
      * Stores one reading. Returns false when a reading with the same

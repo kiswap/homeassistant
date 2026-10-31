@@ -12,7 +12,7 @@ if (!str_starts_with($path, '/api/')) {
     return false;
 }
 
-foreach (glob(__DIR__ . '/src/*.php') as $file) {
+foreach (glob(__DIR__ . '/core/*.php') as $file) {
     require_once $file;
 }
 
@@ -25,9 +25,10 @@ try {
         array_change_key_case(getallheaders(), CASE_LOWER),
         (string)file_get_contents('php://input'),
     );
-    $resp = Api::handle($req, $settings, new ReadingStore(Db::open($settings['db_path'])), time());
+    $hub = new Hub($settings, Hub::loadPlugins($settings, __DIR__ . '/plugins'));
+    $resp = $hub->handle($req, time()) ?? Response::json(404, ['error' => 'not found']);
 } catch (Throwable $e) {
-    error_log('thermobeacon: ' . get_class($e) . ': ' . $e->getMessage());
+    error_log('homeassistant: ' . get_class($e) . ': ' . $e->getMessage());
     $resp = Response::json(500, ['error' => 'server error']);
 }
 
