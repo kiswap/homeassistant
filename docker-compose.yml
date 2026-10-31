@@ -3,7 +3,7 @@ services:
     image: php:8.5-cli-alpine
     # Published on all of krpi's addresses, so the home network can also use
     # the port directly. The router does not forward it. Access from outside
-    # goes through the nginx reverse proxy on krpi, under /thermobeacon/.
+    # goes through the nginx reverse proxy on krpi, under /homeassistant/.
     ports:
       - "${PORT:-8080}:8080"
     restart: unless-stopped
