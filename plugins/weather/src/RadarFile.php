@@ -52,7 +52,7 @@ final class RadarFile
      */
     public static function grid(string $nc, string $var): array
     {
-        $vars = self::variables($nc);
+        $vars = self::header($nc)['vars'];
         foreach (['La1', 'Lo1', 'Dx', 'Dy', $var] as $name) {
             if (!isset($vars[$name])) {
                 throw new RuntimeException("radar: variable $name missing");
@@ -113,6 +113,87 @@ final class RadarFile
     }
 
     /**
+     * Reads a MEANDER radar forecast: float dBZ values on a regular lat/lon
+     * grid whose position is in the global attributes La1, Lo1, Dx, Dy.
+     * Row 0 is the northern edge. The values stay in the file; resample()
+     * reads the rows it needs.
+     * Files: https://odp.met.hu/weather/nwp/MEANDER/nc/
+     *
+     * @return array{north: float, west: float, dlat: float, dlon: float, rows: int, cols: int, nc: string, begin: int}
+     */
+    public static function forecastGrid(string $nc, string $var): array
+    {
+        $header = self::header($nc);
+        $g = $header['globals'];
+        foreach (['La1', 'Lo1', 'Dx', 'Dy'] as $key) {
+            if (!isset($g[$key])) {
+                throw new RuntimeException("radar: attribute $key missing");
+            }
+        }
+        $v = $header['vars'][$var] ?? throw new RuntimeException("radar: variable $var missing");
+        if ($v['type'] !== 5 || count($v['dims']) !== 2) {
+            throw new RuntimeException("radar: $var is not a 2D float grid");
+        }
+        [$rows, $cols] = $v['dims'];
+        if (strlen($nc) < $v['begin'] + $rows * $cols * 4) {
+            throw new RuntimeException('radar: file is cut short');
+        }
+        return [
+            'north' => $g['La1'], 'west' => $g['Lo1'], 'dlat' => $g['Dy'], 'dlon' => $g['Dx'],
+            'rows' => $rows, 'cols' => $cols, 'nc' => $nc, 'begin' => $v['begin'],
+        ];
+    }
+
+    /**
+     * Puts a forecast grid onto the cells of a radar cut-out ($target has
+     * north, west, dlat, dlon, rows, cols), so a forecast frame has the
+     * same shape and byte values as a measured one. Each cell takes the
+     * value of the nearest forecast cell; cells off the forecast grid are
+     * OUTSIDE. Only the forecast rows under the cut-out are unpacked.
+     */
+    public static function resample(array $source, array $target): string
+    {
+        $cols = [];
+        for ($c = 0; $c < $target['cols']; $c++) {
+            $sc = (int)round(($target['west'] + $c * $target['dlon'] - $source['west']) / $source['dlon']);
+            $cols[] = $sc >= 0 && $sc < $source['cols'] ? $sc : -1;
+        }
+        $inside = array_filter($cols, fn(int $sc) => $sc >= 0);
+        $c0 = $inside === [] ? 0 : min($inside);
+        $c1 = $inside === [] ? -1 : max($inside);
+        $outsideRow = str_repeat(chr(self::OUTSIDE), $target['cols']);
+        $rowCache = [];
+        $data = '';
+        for ($r = 0; $r < $target['rows']; $r++) {
+            $sr = (int)round(($source['north'] - ($target['north'] - $r * $target['dlat'])) / $source['dlat']);
+            if ($sr < 0 || $sr >= $source['rows'] || $c1 < $c0) {
+                $data .= $outsideRow;
+                continue;
+            }
+            if (!isset($rowCache[$sr])) {
+                $offset = $source['begin'] + ($sr * $source['cols'] + $c0) * 4;
+                $values = unpack('G*', substr($source['nc'], $offset, ($c1 - $c0 + 1) * 4));
+                $row = '';
+                foreach ($cols as $sc) {
+                    $row .= $sc < 0 ? chr(self::OUTSIDE) : chr(self::dbzByte($values[$sc - $c0 + 1]));
+                }
+                $rowCache = [$sr => $row]; // rows come in order, so one is enough
+            }
+            $data .= $rowCache[$sr];
+        }
+        return $data;
+    }
+
+    /** dBZ as the measured radar stores it: raw = (dBZ + 32) * 2; 0 is no echo. */
+    private static function dbzByte(float $dbz): int
+    {
+        if ($dbz < -32) {
+            return 0; // also the fill value -9999.9
+        }
+        return min(254, (int)round(($dbz + 32) * 2));
+    }
+
+    /**
      * Run-length encoding: pairs of (count 1..255, value) bytes. A radar
      * frame is mostly zeros, so this keeps it to a few KB.
      */
@@ -133,12 +214,15 @@ final class RadarFile
     }
 
     /**
-     * Header of a netCDF classic file (CDF\x01): name => type, dims, begin.
+     * Header of a netCDF classic file (CDF\x01): the variables (name =>
+     * type, dims, begin) and the numeric global attributes (name => first
+     * value). The record dimension (size 0) is left out of a variable's
+     * dims, so a record variable reads as its first record.
      * https://docs.unidata.ucar.edu/netcdf-c/current/file_format_specifications.html
      *
-     * @return array<string, array{type: int, dims: int[], begin: int}>
+     * @return array{vars: array<string, array{type: int, dims: int[], begin: int}>, globals: array<string, float>}
      */
-    private static function variables(string $nc): array
+    private static function header(string $nc): array
     {
         if (substr($nc, 0, 4) !== "CDF\x01") {
             throw new RuntimeException('radar: not a netCDF classic file');
@@ -155,13 +239,21 @@ final class RadarFile
             $pos += ($len + 3) & ~3;
             return $s;
         };
-        $skipAttributes = function () use (&$pos, $u32, $name): void {
+        $attributes = function () use ($nc, &$pos, $u32, $name): array {
             $u32(); // tag, or 0 when absent
+            $values = [];
             for ($n = $u32(); $n > 0; $n--) {
-                $name();
-                $size = self::TYPE_SIZE[$u32()] ?? throw new RuntimeException('radar: bad attribute type');
-                $pos += ($u32() * $size + 3) & ~3;
+                $key = $name();
+                $type = $u32();
+                $size = self::TYPE_SIZE[$type] ?? throw new RuntimeException('radar: bad attribute type');
+                $count = $u32();
+                $format = [4 => 'N', 5 => 'G', 6 => 'E'][$type] ?? null;
+                if ($format !== null && $count > 0) {
+                    $values[$key] = (float)unpack($format, $nc, $pos)[1];
+                }
+                $pos += ($count * $size + 3) & ~3;
             }
+            return $values;
         };
 
         $u32();
@@ -170,7 +262,7 @@ final class RadarFile
             $name();
             $dims[] = $u32();
         }
-        $skipAttributes();
+        $globals = $attributes();
         $u32();
         $vars = [];
         for ($n = $u32(); $n > 0; $n--) {
@@ -179,15 +271,15 @@ final class RadarFile
             for ($d = $u32(); $d > 0; $d--) {
                 $ids[] = $u32();
             }
-            $skipAttributes();
+            $attributes();
             $type = $u32();
             $u32(); // vsize
             $vars[$varName] = [
                 'type' => $type,
-                'dims' => array_map(fn(int $id) => $dims[$id], $ids),
+                'dims' => array_values(array_filter(array_map(fn(int $id) => $dims[$id], $ids))),
                 'begin' => $u32(),
             ];
         }
-        return $vars;
+        return ['vars' => $vars, 'globals' => $globals];
     }
 }

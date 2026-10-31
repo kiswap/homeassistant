@@ -163,6 +163,9 @@ function test_radar_lists_frames_of_the_last_hour(): void
 {
     $urls = [];
     $plugin = new WeatherPlugin(w_section(w_cache_dir()), function (string $url) use (&$urls) {
+        if (str_contains($url, 'MEANDER')) {
+            return null; // no forecast in this test
+        }
         $urls[] = $url;
         // The newest frame (16:35 UTC) is not published yet.
         return w_radar_url_time($url) >= W_NOW - 300 ? null : w_radar_zip(100);
@@ -174,7 +177,7 @@ function test_radar_lists_frames_of_the_last_hour(): void
         $urls[0],
     );
     assert_eq(3, count($data['frames']));
-    assert_eq(W_NOW - 600, end($data['frames']), 'newest published frame is 16:30 UTC');
+    assert_eq(['time' => W_NOW - 600], end($data['frames']), 'newest published frame is 16:30 UTC');
 
     // Later requests fetch the rest; the missing frame waits RADAR_RETRY seconds.
     for ($i = 1; $i <= 2; $i++) {
@@ -190,12 +193,15 @@ function test_radar_lists_frames_of_the_last_hour(): void
 
 function test_radar_frame_holds_the_cut_out(): void
 {
-    $plugin = new WeatherPlugin(w_section(w_cache_dir()), fn(string $url) => w_radar_zip(100));
+    $plugin = new WeatherPlugin(
+        w_section(w_cache_dir()),
+        fn(string $url) => str_contains($url, 'MEANDER') ? null : w_radar_zip(100),
+    );
     $list = w_body(w_call($plugin, '/api/weather/radar'));
     $grid = $list['grid'];
     // radius 50 km * 1.5 is about 85 rows each way, but the grid ends 63 rows north.
     assert_true($grid['rows'] > 140 && $grid['rows'] < 160, "rows {$grid['rows']}");
-    $r = w_call($plugin, '/api/weather/radar-frame', ['time' => (string)end($list['frames'])]);
+    $r = w_call($plugin, '/api/weather/radar-frame', ['time' => (string)end($list['frames'])['time']]);
     assert_eq(200, $r->status);
     $rle = base64_decode(w_body($r)['rle']);
     $cells = '';
@@ -225,4 +231,77 @@ function test_radar_stops_after_a_failure(): void
     assert_eq(1, $calls, 'one timeout per request, not four');
     assert_eq([], $data['frames']);
     assert_eq(null, $data['grid']);
+}
+
+/** Run time of a MEANDER URL, e.g. ...MEANDER-maxRadSig-20261031_1600+00015.nc.zip. */
+function w_meander_run(string $url): int
+{
+    preg_match('/MEANDER-maxRadSig-(\d{8}_\d{4})\+0(\d\d)(\d\d)\.nc\.zip$/', $url, $m);
+    return DateTimeImmutable::createFromFormat('Ymd_Hi', $m[1], new DateTimeZone('UTC'))->getTimestamp();
+}
+
+/** Measured frames up to 16:30 UTC; MEANDER runs from $firstRun on, 30 dBZ everywhere. */
+function w_forecast_plugin(int $firstRun, array &$meanderUrls = []): WeatherPlugin
+{
+    $meander = make_zip(make_meander_nc(20, 25, array_fill(0, 500, 30.0), 48.5, 18.0, 0.1, 0.1));
+    return new WeatherPlugin(w_section(w_cache_dir()), function (string $url) use ($firstRun, $meander, &$meanderUrls) {
+        if (str_contains($url, 'MEANDER')) {
+            $meanderUrls[] = $url;
+            return w_meander_run($url) <= $firstRun ? $meander : null;
+        }
+        return w_radar_url_time($url) >= W_NOW - 300 ? null : w_radar_zip(100);
+    });
+}
+
+function w_cells(Response $r): string
+{
+    $rle = base64_decode(w_body($r)['rle']);
+    $cells = '';
+    for ($i = 0; $i < strlen($rle); $i += 2) {
+        $cells .= str_repeat($rle[$i + 1], ord($rle[$i]));
+    }
+    return $cells;
+}
+
+function test_radar_adds_forecast_frames_after_the_measured_ones(): void
+{
+    $urls = [];
+    $plugin = w_forecast_plugin(W_NOW - 2400, $urls); // the 16:00 UTC run
+    for ($i = 0; $i < 6; $i++) {
+        $data = w_body(w_call($plugin, '/api/weather/radar', [], W_NOW + $i));
+    }
+    assert_eq(
+        'https://odp.met.hu/weather/nwp/MEANDER/nc/16/MEANDER-maxRadSig-20261031_1600+00045.nc.zip',
+        $urls[0],
+        'the first frame after 16:30 is +45 minutes',
+    );
+    $forecast = array_values(array_filter($data['frames'], fn(array $f) => isset($f['run'])));
+    assert_eq(11, count($data['frames']) - count($forecast), 'measured frames');
+    assert_eq(6, count($forecast), '16:45 to 18:00 UTC');
+    assert_eq(['time' => W_NOW + 300, 'run' => W_NOW - 2400], $forecast[0]);
+    assert_eq(W_NOW + 4800, end($forecast)['time']);
+
+    $r = w_call($plugin, '/api/weather/radar-frame', ['time' => (string)$forecast[0]['time'], 'run' => (string)$forecast[0]['run']]);
+    assert_eq(200, $r->status);
+    $grid = $data['grid'];
+    $cells = w_cells($r);
+    assert_eq($grid['rows'] * $grid['cols'], strlen($cells), 'same shape as a measured frame');
+    $row = (int)round(($grid['north'] - 47.4979) / $grid['dlat']);
+    $col = (int)round((19.0402 - $grid['west']) / $grid['dlon']);
+    assert_eq(124, ord($cells[$row * $grid['cols'] + $col]), '30 dBZ as a radar byte');
+}
+
+function test_radar_forecast_falls_back_to_the_run_before(): void
+{
+    // The 16:00 run is not published yet, so the 15:00 run is used.
+    $plugin = w_forecast_plugin(W_NOW - 6000);
+    for ($i = 0; $i < 6; $i++) {
+        $data = w_body(w_call($plugin, '/api/weather/radar', [], W_NOW + $i));
+    }
+    $forecast = array_values(array_filter($data['frames'], fn(array $f) => isset($f['run'])));
+    assert_eq(
+        [['time' => W_NOW + 300, 'run' => W_NOW - 6000], ['time' => W_NOW + 1200, 'run' => W_NOW - 6000]],
+        $forecast,
+        'only 16:45 and 17:00 of the 15:00 run come after the measured frames',
+    );
 }

@@ -191,8 +191,37 @@ html, body {
 /* ---- weather radar widget ---- */
 
 .w-radar { padding: 10px 12px; }
-.radar-time { font-size: 18px; color: #1d2329; }
-.radar-time.old { color: #8a939c; font-weight: 500; }
+
+/* Time line: 1 hour ago ---- now -------- 2 hours ahead, with a dot at the shown frame. */
+.tl {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: 14px;
+  font-size: 14px;
+  font-weight: 500;
+  color: #6b737b;
+}
+.tl-seg { position: relative; height: 4px; border-radius: 2px; }
+/* radar.js sets flex-grow from the time spans; these are the defaults. */
+.tl-past { flex: 1 1 0; background: #c3cad2; }
+.tl-future { flex: 2 1 0; background: #8fb8f5; }
+.tl-now { padding: 1px 7px; border-radius: 10px; color: #1d2329; font-weight: 700; }
+.tl-now.on { background: #4a525b; color: #fff; }
+.tl-dot {
+  position: absolute;
+  top: 50%;
+  width: 14px;
+  height: 14px;
+  margin-top: -7px;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  background: #4a525b;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+.tl-dot.forecast { background: #2f6fde; }
+.radar-stale { font-size: 13px; }
 
 .map {
   position: relative;

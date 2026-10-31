@@ -11,10 +11,13 @@ source is a plugin.
   `../thermobeacon/docs/upload-format.md`.
 - The `weather` plugin shows Budapest's weather. Its forecast widget
   takes the next 24 hours from Open-Meteo, in 3-hour blocks. Its radar
-  widget shows HungaroMet's rain radar of the last hour, looped on an
-  OpenStreetMap base map. The radar files are netCDF grids in a zip;
-  `plugins/weather/src/RadarFile.php` reads them in plain PHP and cuts
-  out the area around the place. Both answers are cached as files under
+  widget shows HungaroMet's rain radar of the last hour and the 2-hour
+  radar forecast of HungaroMet's MEANDER nowcast, looped on an
+  OpenStreetMap base map with a time line in the header. Both come as
+  netCDF grids in a zip; `plugins/weather/src/RadarFile.php` reads them
+  in plain PHP, cuts out the area around the place, and puts the coarser
+  forecast onto the radar's cells, so the dashboard draws both the same
+  way. Both answers are cached as files under
   `/data/weather`.
 - The next planned plugin is `locsolo`, the user's irrigation controller
   (`/home/kiswap/Projects/locsolo`). It will pull its data from the

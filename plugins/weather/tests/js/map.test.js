@@ -1,6 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { worldPx, fitZoom, project, tilesFor, decodeRle, radarColor, OUTSIDE } from '../../web/map.js';
+import {
+  worldPx, fitZoom, project, tilesFor, decodeRle, radarColor, OUTSIDE, timeline, linePosition,
+} from '../../web/map.js';
 
 const BUDAPEST = { lat: 47.4979, lon: 19.0402 };
 
@@ -56,4 +58,22 @@ test('radarColor by dBZ band', () => {
   assert.equal(radarColor(114), '#2db84d', '25 dBZ');
   assert.equal(radarColor(160), '#e8401c', '48 dBZ');
   assert.equal(radarColor(174), '#b0189a', '55 dBZ');
+});
+
+test('timeline: 1 hour past, 2 hours future', () => {
+  const line = timeline(10000);
+  assert.deepEqual(line, { from: 6400, now: 10000, to: 17200 });
+  assert.deepEqual(linePosition(6400, line), { future: false, at: 0 });
+  assert.deepEqual(linePosition(8200, line), { future: false, at: 0.5 });
+  assert.deepEqual(linePosition(10000, line), { future: false, at: 1 }, 'now ends the past segment');
+  assert.deepEqual(linePosition(13600, line), { future: true, at: 0.5 });
+  assert.deepEqual(linePosition(0, line), { future: false, at: 0 }, 'clamped at the left end');
+  assert.deepEqual(linePosition(99999, line), { future: true, at: 1 }, 'clamped at the right end');
+});
+
+test('timeline starts at the oldest frame', () => {
+  const line = timeline(10000, 5800);
+  assert.equal(line.from, 5800);
+  assert.deepEqual(linePosition(5800, line), { future: false, at: 0 });
+  assert.equal(timeline(10000, 10000).from, 9940, 'the past segment never has zero length');
 });

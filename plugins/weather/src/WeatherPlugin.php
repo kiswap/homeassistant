@@ -4,8 +4,8 @@ declare(strict_types=1);
 
 /**
  * Weather for one place: a 24-hour precipitation forecast in 3-hour blocks
- * from Open-Meteo, and the rain radar of the last hour from HungaroMet's
- * open data (cut out around the place). Both services are free and need no
+ * from Open-Meteo, and the rain radar of the last hour plus a 2-hour radar
+ * forecast from HungaroMet's open data (cut out around the place). Both services are free and need no
  * key. The answers are cached as files under cache_dir, so the dashboard's
  * refreshes do not reach the services every minute.
  */
@@ -28,6 +28,15 @@ final class WeatherPlugin implements Plugin
     private const FORECAST_URL = 'https://api.open-meteo.com/v1/forecast';
     private const RADAR_URL = 'https://odp.met.hu/weather/radar/composite/nc/refl2D_pscappi/radar_composite-refl2D_pscappi-%s.nc.zip';
     private const RADAR_VAR = 'refl2D_pscappi';
+    /**
+     * MEANDER, HungaroMet's nowcast: one run per hour, published about 10
+     * minutes after the hour, with radar frames every 15 minutes for 2 hours.
+     */
+    public const FORECAST_STEP = 900;
+    public const FORECAST_FRAMES = 8;
+    public const FORECAST_DELAY = 600;
+    private const FORECAST_RADAR_URL = 'https://odp.met.hu/weather/nwp/MEANDER/nc/%s/MEANDER-maxRadSig-%s+0%02d%02d.nc.zip';
+    private const FORECAST_VAR = 'maxRadSig';
 
     private array $section;
     /** @var Closure(string): ?string */
@@ -189,9 +198,12 @@ final class WeatherPlugin implements Plugin
     }
 
     /**
-     * Lists the radar frames of the last hour. Frames that are not cached
-     * yet are downloaded, a few per request, so one request never waits
-     * long. The frame data itself comes from /api/weather/radar-frame.
+     * Lists the radar frames of the last hour, then the forecast frames of
+     * the newest MEANDER run that come after them. Frames that are not
+     * cached yet are downloaded, a few per request, so one request never
+     * waits long. The frame data itself comes from /api/weather/radar-frame.
+     * A forecast frame has the same grid and byte values as a measured one,
+     * so the dashboard draws both the same way.
      */
     private function radar(Request $req, int $now): Response
     {
@@ -200,30 +212,80 @@ final class WeatherPlugin implements Plugin
         $attempts = 0;
         $times = [];
         $grid = null;
+        $s = $this->section;
+        $crop = fn(string $nc) => RadarFile::crop(
+            RadarFile::grid($nc, self::RADAR_VAR),
+            (float)$s['latitude'],
+            (float)$s['longitude'],
+            $s['radius_km'] * self::RADAR_MARGIN,
+        );
         for ($i = 0; $i < self::RADAR_FRAMES; $i++) {
             $time = $newest - $i * self::RADAR_STEP;
-            $frame = $this->readFrame($time);
-            if ($frame === null && $attempts < self::RADAR_ATTEMPTS && !$this->recentlyMissed($time, $now)) {
-                $attempts++;
-                $frame = $this->fetchFrame($time, $now, $attempts);
-            }
+            $url = sprintf(self::RADAR_URL, gmdate('Ymd_Hi', $time));
+            $frame = $this->frame((string)$time, $url, $crop, $now, $attempts);
             if ($frame !== null) {
                 $times[] = $time;
                 $grid ??= $frame['grid'];
             }
         }
-        $this->cleanUp($now);
         sort($times);
-        return Response::json(200, ['now' => $now, 'grid' => $grid, 'frames' => $times]);
+        $frames = array_map(fn(int $t) => ['time' => $t], $times);
+        if ($grid !== null) {
+            $latest = $times === [] ? 0 : end($times);
+            array_push($frames, ...$this->forecastFrames($grid, $latest, $now, $attempts));
+        }
+        $this->cleanUp($now);
+        return Response::json(200, ['now' => $now, 'grid' => $grid, 'frames' => $frames]);
+    }
+
+    /**
+     * The frames of the newest MEANDER run that has any, later than
+     * $latest (the newest measured frame). A run is tried in order and
+     * stops at the first frame it cannot get, so an unpublished run costs
+     * one download per request; then the run before it is used.
+     *
+     * @return list<array{time: int, run: int}>
+     */
+    private function forecastFrames(array $grid, int $latest, int $now, int &$attempts): array
+    {
+        $toGrid = fn(string $nc) => ['data' => RadarFile::resample(RadarFile::forecastGrid($nc, self::FORECAST_VAR), $grid)] + $grid;
+        $run = intdiv($now - self::FORECAST_DELAY, 3600) * 3600;
+        foreach ([$run, $run - 3600] as $run) {
+            $found = [];
+            for ($k = 1; $k <= self::FORECAST_FRAMES; $k++) {
+                $offset = $k * self::FORECAST_STEP;
+                $time = $run + $offset;
+                if ($time <= $latest) {
+                    continue;
+                }
+                $url = sprintf(
+                    self::FORECAST_RADAR_URL,
+                    gmdate('H', $run),
+                    gmdate('Ymd_Hi', $run),
+                    intdiv($offset, 3600),
+                    intdiv($offset % 3600, 60),
+                );
+                if ($this->frame("$time-f$run", $url, $toGrid, $now, $attempts) === null) {
+                    break;
+                }
+                $found[] = ['time' => $time, 'run' => $run];
+            }
+            if ($found !== []) {
+                return $found;
+            }
+        }
+        return [];
     }
 
     private function radarFrame(Request $req, int $now): Response
     {
-        $frame = $this->readFrame((int)($req->query['time'] ?? 0));
+        $time = (int)($req->query['time'] ?? 0);
+        $name = isset($req->query['run']) ? "$time-f" . (int)$req->query['run'] : (string)$time;
+        $frame = $this->readFrame($name);
         if ($frame === null) {
             return Response::json(404, ['error' => 'no such frame']);
         }
-        return Response::json(200, ['time' => (int)$req->query['time'], 'rle' => $frame['rle']]);
+        return Response::json(200, ['time' => $time, 'rle' => $frame['rle']]);
     }
 
     private function radarDir(): string
@@ -231,59 +293,66 @@ final class WeatherPlugin implements Plugin
         return $this->section['cache_dir'] . '/radar';
     }
 
-    /** The cut-out depends on these settings, so they are part of the file name. */
-    private function frameFile(int $time): string
+    /**
+     * A frame's name starts with its time ("<time>" measured,
+     * "<time>-f<run>" forecast). The cut-out depends on the settings, so
+     * they are part of the file name.
+     */
+    private function frameFile(string $name): string
     {
         $s = $this->section;
         $key = substr(md5(json_encode([$s['latitude'], $s['longitude'], $s['radius_km']])), 0, 8);
-        return $this->radarDir() . "/$time-$key.json";
+        return $this->radarDir() . "/$name-$key.json";
     }
 
-    private function readFrame(int $time): ?array
+    private function readFrame(string $name): ?array
     {
-        $file = $this->frameFile($time);
+        $file = $this->frameFile($name);
         $frame = is_file($file) ? json_decode((string)file_get_contents($file), true) : null;
         return is_array($frame) ? $frame : null;
     }
 
-    private function recentlyMissed(int $time, int $now): bool
+    private function recentlyMissed(string $name, int $now): bool
     {
-        $file = $this->radarDir() . "/$time.miss";
+        $file = $this->radarDir() . "/$name.miss";
         return is_file($file) && $now - (int)file_get_contents($file) < self::RADAR_RETRY;
     }
 
     /**
-     * Downloads one frame, cuts out the area around the place, and caches
-     * it. A missing frame (not published yet) is tried again after
-     * RADAR_RETRY seconds. Any other failure also sets $attempts to the
-     * limit, so a dead service costs one timeout per request, not several.
+     * Returns a cached frame, or downloads it when the request still has
+     * attempts left. $toGrid turns the netCDF file into a cut-out (grid
+     * keys plus data). A missing file (not published yet) is tried again
+     * after RADAR_RETRY seconds. Any other failure also sets $attempts to
+     * the limit, so a dead service costs one timeout per request.
      */
-    private function fetchFrame(int $time, int $now, int &$attempts): ?array
+    private function frame(string $name, string $url, Closure $toGrid, int $now, int &$attempts): ?array
     {
-        $s = $this->section;
-        $url = sprintf(self::RADAR_URL, gmdate('Ymd_Hi', $time));
+        $frame = $this->readFrame($name);
+        if ($frame !== null) {
+            return $frame;
+        }
+        if ($attempts >= self::RADAR_ATTEMPTS || $this->recentlyMissed($name, $now)) {
+            return null;
+        }
+        $attempts++;
+        $miss = $this->radarDir() . "/$name.miss";
         try {
             $zip = ($this->fetch)($url);
             if ($zip === null) {
-                $this->writeFile($this->radarDir() . "/$time.miss", (string)$now);
+                $this->writeFile($miss, (string)$now);
                 return null;
             }
-            $grid = RadarFile::crop(
-                RadarFile::grid(RadarFile::unzip($zip), self::RADAR_VAR),
-                (float)$s['latitude'],
-                (float)$s['longitude'],
-                $s['radius_km'] * self::RADAR_MARGIN,
-            );
+            $grid = $toGrid(RadarFile::unzip($zip));
             $frame = ['rle' => base64_encode(RadarFile::rle($grid['data']))];
             unset($grid['data']);
             $frame['grid'] = $grid;
-            $this->writeFile($this->frameFile($time), json_encode($frame, JSON_THROW_ON_ERROR));
+            $this->writeFile($this->frameFile($name), json_encode($frame, JSON_THROW_ON_ERROR));
             return $frame;
         } catch (Throwable $e) {
-            error_log('weather: radar ' . gmdate('Y-m-d H:i', $time) . ': ' . $e->getMessage());
+            error_log("weather: radar $name: " . $e->getMessage());
             $attempts = self::RADAR_ATTEMPTS;
             try {
-                $this->writeFile($this->radarDir() . "/$time.miss", (string)$now);
+                $this->writeFile($miss, (string)$now);
             } catch (Throwable) {
             }
             return null;

@@ -88,3 +88,20 @@ export function radarColor(raw) {
   }
   return null;
 }
+
+// The radar time line: a past segment from the oldest measured frame
+// (about 1 hour ago), the current time, and a future segment (2 hours of
+// forecast). Distance on the segments is time.
+export const PAST_SECONDS = 3600;
+export const FUTURE_SECONDS = 7200;
+
+export function timeline(now, oldest = now - PAST_SECONDS) {
+  return { from: Math.min(oldest, now - 60), now, to: now + FUTURE_SECONDS };
+}
+
+// Which segment a time is on, and where on it, from 0 (left) to 1 (right).
+export function linePosition(time, line) {
+  const clamp = (v) => Math.min(1, Math.max(0, v));
+  if (time <= line.now) return { future: false, at: clamp((time - line.from) / (line.now - line.from)) };
+  return { future: true, at: clamp((time - line.now) / (line.to - line.now)) };
+}

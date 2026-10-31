@@ -109,3 +109,50 @@ function test_rle_pairs_count_and_value(): void
     assert_eq("\xff\x00\x01\x00", RadarFile::rle(str_repeat("\0", 256)), 'runs stop at 255');
     assert_eq('', RadarFile::rle(''));
 }
+
+/** A MEANDER file: position in global attributes, float dBZ in a record variable. */
+function make_meander_nc(int $rows, int $cols, array $values, float $north = 48.8, float $west = 15.7,
+                         float $dlat = 0.014378, float $dlon = 0.021274): string
+{
+    $name = fn(string $s) => pack('N', strlen($s)) . str_pad($s, (strlen($s) + 3) & ~3, "\0");
+    $float = fn(string $n, float $v) => $name($n) . pack('NN', 5, 1) . pack('G', $v);
+    $globals = pack('NN', 12, 5) . $name('title') . pack('NN', 2, 7) . "MEANDER\0"
+        . $float('Lo1', $west) . $float('La1', $north) . $float('Dx', $dlon) . $float('Dy', $dlat);
+    $dims = pack('NN', 10, 3) . $name('record') . pack('N', 0) . $name('lat') . pack('N', $rows)
+        . $name('lon') . pack('N', $cols);
+    $varHead = fn(int $begin) => pack('NN', 11, 1) . $name('maxRadSig') . pack('NNNN', 3, 0, 1, 2)
+        . pack('NN', 0, 0) . pack('NNN', 5, $rows * $cols * 4, $begin);
+    $head = "CDF\x01" . pack('N', 1) . $dims . $globals;
+    $begin = strlen($head . $varHead(0));
+    $data = '';
+    foreach ($values as $v) {
+        $data .= pack('G', $v);
+    }
+    return $head . $varHead($begin) . $data;
+}
+
+function test_forecast_grid_reads_attributes_and_floats(): void
+{
+    $grid = RadarFile::forecastGrid(make_meander_nc(2, 3, [0, 1, 2, 3, 4, 5]), 'maxRadSig');
+    assert_eq(2, $grid['rows']);
+    assert_eq(3, $grid['cols']);
+    assert_true(abs($grid['north'] - 48.8) < 1e-5, 'north');
+    assert_true(abs($grid['dlon'] - 0.021274) < 1e-7, 'dlon');
+}
+
+function test_resample_maps_onto_the_radar_cells(): void
+{
+    // Forecast: 2 x 2 cells of 1 degree from 10N 0E: 20 dBZ, 40 / no data (fill), -40.
+    $source = RadarFile::forecastGrid(
+        make_meander_nc(2, 2, [20.0, 40.0, -9999.9, -40.0], 10.0, 0.0, 1.0, 1.0),
+        'maxRadSig',
+    );
+    // Target: 3 x 4 cells of half a degree from 10N 0E, the last column off the forecast.
+    $target = ['north' => 10.0, 'west' => 0.0, 'dlat' => 0.5, 'dlon' => 0.5, 'rows' => 3, 'cols' => 4];
+    $data = RadarFile::resample($source, $target);
+    assert_eq(12, strlen($data));
+    $row = fn(int $r) => array_map('ord', str_split(substr($data, $r * 4, 4)));
+    // round() sends 0.5 up, so 0.5 degrees east already reads the second column.
+    assert_eq([104, 144, 144, 255], $row(0), '20 dBZ = byte 104, 40 dBZ = 144, off the grid = 255');
+    assert_eq([0, 0, 0, 255], $row(2), 'fill value and -40 dBZ are no echo');
+}
