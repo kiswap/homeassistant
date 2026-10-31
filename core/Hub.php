@@ -35,6 +35,41 @@ final class Hub
     }
 
     /**
+     * Maps /plugins/<name>/<rest> to <pluginsDir>/<name>/web/<rest>. Returns
+     * null unless the plugin is enabled and the file is a real file inside
+     * its web/ folder.
+     *
+     * @param string[] $enabled plugin names
+     */
+    public static function pluginFile(string $path, array $enabled, string $pluginsDir): ?string
+    {
+        if (preg_match('#^/plugins/([a-z0-9_]+)/(.+)$#', $path, $m) !== 1) {
+            return null;
+        }
+        [, $name, $rest] = $m;
+        if (!in_array($name, $enabled, true) || in_array('..', explode('/', $rest), true)) {
+            return null;
+        }
+        $web = realpath("$pluginsDir/$name/web");
+        $file = realpath("$pluginsDir/$name/web/$rest");
+        if ($web === false || $file === false || !is_file($file) || !str_starts_with($file, $web . '/')) {
+            return null;
+        }
+        return $file;
+    }
+
+    /** Browsers load ES modules only when they come as JavaScript. */
+    public static function contentType(string $file): string
+    {
+        return match (strtolower(pathinfo($file, PATHINFO_EXTENSION))) {
+            'js' => 'application/javascript; charset=utf-8',
+            'css' => 'text/css; charset=utf-8',
+            'svg' => 'image/svg+xml',
+            default => 'application/octet-stream',
+        };
+    }
+
+    /**
      * Handles one request. Returns null for non-API paths, so the caller
      * serves the static file. The password for access from outside is
      * checked by nginx on krpi, not here.

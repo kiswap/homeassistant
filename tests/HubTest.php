@@ -105,3 +105,47 @@ function test_load_plugins_missing_class_throws(): void
     }
     throw new AssertionFailed('no exception');
 }
+
+function plugin_dir(): string
+{
+    $dir = sys_get_temp_dir() . '/ha-web-' . bin2hex(random_bytes(4));
+    mkdir("$dir/demo/web/widgets", 0777, true);
+    file_put_contents("$dir/demo/web/widgets/tile.js", 'export {};');
+    mkdir("$dir/demo/src");
+    file_put_contents("$dir/demo/src/Secret.php", '<?php');
+    return $dir;
+}
+
+function test_plugin_file_found(): void
+{
+    $dir = plugin_dir();
+    assert_eq(realpath("$dir/demo/web/widgets/tile.js"), Hub::pluginFile('/plugins/demo/widgets/tile.js', ['demo'], $dir));
+}
+
+function test_plugin_file_disabled_plugin_null(): void
+{
+    assert_eq(null, Hub::pluginFile('/plugins/demo/widgets/tile.js', ['other'], plugin_dir()));
+}
+
+function test_plugin_file_dotdot_null(): void
+{
+    $dir = plugin_dir();
+    assert_eq(null, Hub::pluginFile('/plugins/demo/../demo/src/Secret.php', ['demo'], $dir));
+    assert_eq(null, Hub::pluginFile('/plugins/demo/widgets/../../src/Secret.php', ['demo'], $dir));
+}
+
+function test_plugin_file_missing_null(): void
+{
+    $dir = plugin_dir();
+    assert_eq(null, Hub::pluginFile('/plugins/demo/widgets/none.js', ['demo'], $dir));
+    assert_eq(null, Hub::pluginFile('/plugins/demo/', ['demo'], $dir));
+    assert_eq(null, Hub::pluginFile('/plugins/demo/widgets', ['demo'], $dir));
+}
+
+function test_content_type_js(): void
+{
+    assert_eq('application/javascript; charset=utf-8', Hub::contentType('/x/widgets/tile.js'));
+    assert_eq('text/css; charset=utf-8', Hub::contentType('/x/a.css'));
+    assert_eq('image/svg+xml', Hub::contentType('/x/a.svg'));
+    assert_eq('application/octet-stream', Hub::contentType('/x/a.bin'));
+}
