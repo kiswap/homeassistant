@@ -9,6 +9,13 @@ source is a plugin.
   BLE sensors. The collector app on the tablet uploads them. That app is
   in `../thermobeacon/`, and its request format is in
   `../thermobeacon/docs/upload-format.md`.
+- The `weather` plugin shows Budapest's weather. Its forecast widget
+  takes the next 24 hours from Open-Meteo, in 3-hour blocks. Its radar
+  widget shows HungaroMet's rain radar of the last hour, looped on an
+  OpenStreetMap base map. The radar files are netCDF grids in a zip;
+  `plugins/weather/src/RadarFile.php` reads them in plain PHP and cuts
+  out the area around the place. Both answers are cached as files under
+  `/data/weather`.
 - The next planned plugin is `locsolo`, the user's irrigation controller
   (`/home/kiswap/Projects/locsolo`). It will pull its data from the
   locsoló server and store nothing.

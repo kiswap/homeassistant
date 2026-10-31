@@ -10,6 +10,14 @@
         {"id": "konyha", "name": "konyha", "icon": "kitchen", "address": "70:F7:00:00:14:63"},
         {"id": "kinti",  "name": "kinti",  "icon": "tree",    "address": "70:F7:00:00:12:3A"}
       ]
+    },
+    "weather": {
+      "place": "Budapest",
+      "latitude": 47.4979,
+      "longitude": 19.0402,
+      "radius_km": 50,
+      "timezone": "Europe/Budapest",
+      "cache_dir": "/data/weather"
     }
   },
   "layout": {
@@ -19,9 +27,9 @@
       {"type": "thermobeacon.sensor", "sensor": "utazo",  "col": 1, "row": 1},
       {"type": "thermobeacon.sensor", "sensor": "konyha", "col": 2, "row": 1},
       {"type": "thermobeacon.sensor", "sensor": "kinti",  "col": 3, "row": 1},
-      {"type": "placeholder", "col": 4, "row": 1},
-      {"type": "thermobeacon.graph", "sensors": ["konyha", "kinti"], "col": 1, "row": 2, "colSpan": 3},
-      {"type": "placeholder", "col": 4, "row": 2}
+      {"type": "weather.radar", "col": 4, "row": 1},
+      {"type": "thermobeacon.graph", "sensors": ["konyha", "kinti"], "col": 1, "row": 2, "colSpan": 2},
+      {"type": "weather.forecast", "col": 3, "row": 2, "colSpan": 2}
     ]
   }
 }

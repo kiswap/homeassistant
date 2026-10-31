@@ -162,6 +162,11 @@ could read the key and send fake readings; nothing else is exposed.
   own section under `plugins`. The thermobeacon section holds the API
   key, the database path, and the sensor names and icons. A new API key
   must also be entered in the tablet app.
+- The weather section names the place (`place`, `latitude`, `longitude`)
+  and the radar area around it (`radius_km`). The weather plugin needs
+  internet access from krpi: it fetches the forecast from Open-Meteo and
+  the radar from HungaroMet's open data portal, and caches both under
+  `/data/weather`.
 - To resize or move a widget, change its `col`, `row`, `colSpan`, or
   `rowSpan` in `layout.widgets`. `layout.columns` and `layout.rows` set the
   grid. A widget type is `<plugin>.<widget>`, for example

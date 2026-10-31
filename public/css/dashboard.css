@@ -123,6 +123,91 @@ html, body {
 .chart svg { display: block; width: 100%; height: 100%; }
 .chart .empty { padding: 20px 0; color: #6b737b; font-size: 17px; }
 
+.stale-text { color: #c5221f; font-weight: 600; }
+
+/* ---- weather forecast widget ---- */
+
+.fc-now { margin-left: auto; font-size: 22px; color: #1d2329; }
+
+.fc-cols {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.fc-col {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.fc-icon { font-size: min(3.2vw, 5vh); line-height: 1.2; }
+
+.fc-bar-area {
+  flex: 1;
+  min-height: 0;
+  width: 100%;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  align-items: center;
+  border-bottom: 2px solid #c3cad2;
+}
+
+.fc-mm { font-size: 15px; font-weight: 600; color: #1a62c9; }
+
+.fc-bar {
+  width: 70%;
+  background: #3f8cff;
+  border-radius: 4px 4px 0 0;
+}
+
+.fc-hour { margin-top: 4px; font-size: 15px; color: #4a525b; }
+.fc-prob { font-size: 17px; font-weight: 600; }
+.fc-prob.p-lo { color: #9aa0a6; font-weight: 500; }
+.fc-prob.p-mid { color: #3f8cff; }
+.fc-prob.p-hi { color: #1a4fa8; }
+
+/* ---- weather radar widget ---- */
+
+.w-radar { padding: 10px 12px; }
+.radar-time { font-size: 18px; color: #1d2329; }
+.radar-time.old { color: #8a939c; font-weight: 500; }
+
+.map {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  margin-top: 6px;
+  overflow: hidden;
+  border-radius: 8px;
+  background: #e3e7ec;
+}
+
+/* Grey base map, so the rain colours stand out from parks and forests. */
+.map-tiles img {
+  position: absolute;
+  max-width: none;
+  filter: grayscale(1) contrast(0.9) brightness(1.05);
+}
+
+.map-radar { position: absolute; left: 0; top: 0; }
+
+.map-attrib {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  padding: 1px 5px;
+  font-size: 10px;
+  color: #4a525b;
+  background: rgba(255, 255, 255, 0.7);
+}
+
 /* ---- free slot ---- */
 
 .w-placeholder {
@@ -158,6 +243,9 @@ html, body {
   .w { grid-column: auto !important; grid-row: auto !important; }
   .w-sensor { min-height: 170px; }
   .w-graph { height: 340px; }
+  .w-forecast { height: 300px; }
+  .w-radar { height: 360px; }
+  .fc-icon { font-size: 24px; }
   .w-placeholder { display: none; }
   .temp { font-size: 64px; }
   .hum { font-size: 30px; }
