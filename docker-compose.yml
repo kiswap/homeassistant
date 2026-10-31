@@ -1,0 +1,25 @@
+services:
+  thermobeacon:
+    image: php:8.5-cli-alpine
+    # Published on all of krpi's addresses, so the home network can also use
+    # the port directly. The router does not forward it. Access from outside
+    # goes through the nginx reverse proxy on krpi, under /thermobeacon/.
+    ports:
+      - "${PORT:-8080}:8080"
+    restart: unless-stopped
+    environment:
+      SETTINGS_PATH: ${SETTINGS_PATH:-/app/config/settings.json}
+    volumes:
+      - ./:/app:ro
+      - ${DATA_DIR:-./data}:/data
+    working_dir: /app
+    # -q: no access log, so the server does not write a line per request.
+    # display_errors=0: PHP warnings go to the container log only. Printed
+    # warnings would come before the headers, and every answer would turn
+    # into "200 OK".
+    command: ["sh", "-c", "exec php -q -d display_errors=0 -d log_errors=1 -S 0.0.0.0:8080 -t /app/public /app/router.php"]
+    logging:
+      driver: json-file
+      options:
+        max-size: "1m"
+        max-file: "2"

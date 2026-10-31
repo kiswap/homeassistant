@@ -1,0 +1,5 @@
+config/settings.json
+data/
+.env
+node_modules/
+.superpowers/

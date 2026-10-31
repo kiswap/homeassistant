@@ -1,0 +1,165 @@
+/* Light theme for the old tablet screen. Must work in Chromium 90:
+   no container queries, no CSS nesting. */
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  height: 100%;
+  background: #eef1f5;
+  color: #1d2329;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+}
+
+#grid {
+  display: grid;
+  gap: 12px;
+  padding: 12px;
+  height: 100vh;
+}
+
+/* ---- widget frame ---- */
+
+.w {
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 0;
+  padding: 14px 18px;
+  background: #fff;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+}
+
+.w > * { position: relative; z-index: 1; }
+
+.w header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 20px;
+  font-weight: 600;
+  color: #4a525b;
+}
+
+.btns { display: flex; gap: 6px; align-items: center; }
+
+.btn {
+  min-width: 36px;
+  height: 36px;
+  padding: 0 8px;
+  border: 0;
+  border-radius: 8px;
+  background: #e3e7ec;
+  color: #1d2329;
+  font-size: 17px;
+  cursor: pointer;
+}
+.btn.on { background: #2f6fde; color: #fff; }
+.btn.busy { opacity: 0.5; }
+
+.error { color: #c5221f; font-size: 14px; min-height: 0; }
+
+/* ---- sensor widget ---- */
+
+.bg-icon {
+  position: absolute;
+  z-index: 0;
+  right: -4%;
+  bottom: -10%;
+  font-size: min(16vw, 30vh);
+  line-height: 1;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+.temp {
+  margin-top: auto;
+  font-size: min(7.5vw, 13vh);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -1px;
+}
+.temp small, .hum small { font-size: 0.42em; font-weight: 500; color: #5f6870; margin-left: 2px; }
+
+.hum {
+  margin-top: 6px;
+  font-size: min(3.6vw, 6.2vh);
+  font-weight: 600;
+  color: #1a62c9;
+}
+
+.meta { margin-top: auto; padding-top: 8px; font-size: 15px; color: #6b737b; }
+
+.stale .temp, .stale .hum { color: #9aa0a6; }
+.stale .meta { color: #c5221f; font-weight: 600; }
+
+/* ---- graph widget ---- */
+
+.range { display: flex; gap: 4px; }
+
+.legend {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin: 6px 0 4px;
+  font-size: 15px;
+  color: #4a525b;
+}
+.legend i {
+  display: inline-block;
+  width: 22px;
+  height: 0;
+  margin-right: 6px;
+  vertical-align: middle;
+  border-top: 3px solid;
+}
+.legend i.dashed { border-top-style: dashed; border-top-width: 2px; }
+
+.chart { flex: 1; min-height: 0; }
+.chart svg { display: block; width: 100%; height: 100%; }
+.chart .empty { padding: 20px 0; color: #6b737b; font-size: 17px; }
+
+/* ---- free slot ---- */
+
+.w-placeholder {
+  background: transparent;
+  box-shadow: none;
+  border: 2px dashed #c3cad2;
+  align-items: center;
+  justify-content: center;
+  color: #8a939c;
+  font-size: 15px;
+}
+
+/* ---- collector status ---- */
+
+.collector {
+  position: fixed;
+  right: 14px;
+  bottom: 2px;
+  font-size: 12px;
+  color: #8a939c;
+}
+.collector.stale { color: #c5221f; font-weight: 600; }
+
+/* ---- phone and narrow windows: one column, page scrolls ---- */
+
+@media (max-width: 700px) {
+  #grid {
+    height: auto;
+    grid-template-columns: 1fr !important;
+    grid-template-rows: none !important;
+  }
+  .w { grid-column: auto !important; grid-row: auto !important; }
+  .w-sensor { min-height: 170px; }
+  .w-graph { height: 340px; }
+  .w-placeholder { display: none; }
+  .temp { font-size: 64px; }
+  .hum { font-size: 30px; }
+  .bg-icon { font-size: 150px; }
+  .collector { position: static; padding: 0 14px 10px; text-align: right; }
+}
