@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Starts the real container on this machine and checks the HTTP API with curl.
+# Builds the image for this machine, starts it with the real compose file,
+# and checks the HTTP API with curl.
 # Usage: bash tests/smoke.sh   (from anywhere)
 # Leaves its temp directory in /tmp for inspection.
 set -euo pipefail
@@ -26,7 +27,8 @@ tb["db_path"] = "/data/thermobeacon.sqlite"
 json.dump(s, open(sys.argv[1], "w", encoding="utf-8"), ensure_ascii=False)
 EOF
 
-export PORT DATA_DIR="$TMP" SETTINGS_PATH=/data/settings.json
+docker build -q -t homeassistant:smoke . >/dev/null
+export PORT DATA_DIR="$TMP" SETTINGS_PATH=/data/settings.json TAG=smoke
 compose() { docker compose -p hasmoke "$@"; }
 compose up -d >/dev/null 2>&1
 trap 'compose down >/dev/null 2>&1' EXIT
@@ -54,6 +56,10 @@ check "future reading 503" "503" "$(curl -s -o /dev/null -w '%{http_code}' -X PO
 sleep 0.5
 check "error_log reaches docker logs" "reading from the future" "$(compose logs 2>&1)"
 check "db on data dir" "thermobeacon.sqlite" "$(ls "$TMP")"
+check "image holds only the app" "core plugins public router.php tools " \
+  "$(docker run --rm homeassistant:smoke ls /app | tr '\n' ' ')"
+check "image has no plugin tests" "src web " \
+  "$(docker run --rm homeassistant:smoke ls /app/plugins/thermobeacon | tr '\n' ' ')"
 LAN_IP="$(hostname -I | awk '{print $1}')"
 check "published on $LAN_IP" "200" "$(curl -s -m 3 -o /dev/null -w '%{http_code}' "http://$LAN_IP:$PORT/" || true)"
 

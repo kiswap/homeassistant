@@ -85,9 +85,27 @@ Run from this folder:
   (runs `tests/*Test.php` and `plugins/*/tests/*Test.php`).
 - JS: `npm test` (Node 24).
 - Smoke: `SMOKE_PORT=18090 bash tests/smoke.sh` starts the real container.
-- Dev server with fake history: put a `settings.json` (with `db_path`
+- Dev server with fake history, running the source folder (no image
+  build): put a `settings.json` (with `db_path`
   `/data/thermobeacon.sqlite`) in `/tmp/ha-dev`, then
-  `PORT=18082 DATA_DIR=/tmp/ha-dev SETTINGS_PATH=/data/settings.json docker compose -p hadev up -d`
+  `TAG=dev PORT=18082 DATA_DIR=/tmp/ha-dev SETTINGS_PATH=/data/settings.json docker compose -f docker-compose.yml -f docker-compose.dev.yml -p hadev up -d`
   and `docker compose -p hadev exec homeassistant php tools/seed.php /data/settings.json 3`.
+
+## Image
+
+- krpi runs the hub from an image; only `docker-compose.yml`, the
+  environment file, and `config/settings.json` are files there.
+  `docker-compose.yml` is that production file. `docker-compose.dev.yml`
+  is an override that mounts the source instead.
+- `Dockerfile` copies `router.php`, `core/`, `public/`, `plugins/`, and
+  `tools/` onto `php:8.5-cli-alpine`. `.dockerignore` keeps tests,
+  settings, data, and docs out. The Dockerfile must stay free of `RUN`
+  steps: then the laptop builds the ARMv6 image without ARM emulation,
+  which is not installed.
+- `tools/build-image.sh` builds `homeassistant:<git hash>` for
+  `linux/arm/v6` and saves it gzipped to `dist/` (git-ignored, about
+  40 MB). `TAG` in krpi's environment file picks the version.
+- The smoke test builds the image for this PC and runs it with the
+  production compose file, so it covers the Dockerfile too.
 
 Deployment to krpi: `DEPLOY.md`.

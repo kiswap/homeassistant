@@ -1,6 +1,9 @@
+# Runs the hub from its image. On krpi this file sits next to the env file
+# and config/settings.json; the code itself is only in the image. The image
+# comes from tools/build-image.sh, and TAG picks its version (see DEPLOY.md).
 services:
   homeassistant:
-    image: php:8.5-cli-alpine
+    image: homeassistant:${TAG:?set TAG to the image tag}
     # Published on all of krpi's addresses, so the home network can also use
     # the port directly. The router does not forward it. Access from outside
     # goes through the nginx reverse proxy on krpi, under /homeassistant/.
@@ -10,16 +13,10 @@ services:
     environment:
       SETTINGS_PATH: ${SETTINGS_PATH:-/app/config/settings.json}
     volumes:
-      - ./:/app:ro
+      # The folder, not the file: an editor that replaces settings.json
+      # would otherwise leave the container reading the old file.
+      - ./config:/app/config:ro
       - ${DATA_DIR:-./data}:/data
-    working_dir: /app
-    # -q: no access log, so the server does not write a line per request.
-    # display_errors=0: PHP warnings go to the container log only. Printed
-    # warnings would come before the headers, and every answer would turn
-    # into "200 OK".
-    # error_log=/proc/self/fd/2: with -q, php -S drops error_log() lines
-    # unless they go to a file, so they are sent to stderr explicitly.
-    command: ["sh", "-c", "exec php -q -d display_errors=0 -d log_errors=1 -d error_log=/proc/self/fd/2 -S 0.0.0.0:8080 -t /app/public /app/router.php"]
     logging:
       driver: json-file
       options:

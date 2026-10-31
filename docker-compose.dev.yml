@@ -1,0 +1,11 @@
+# Local development: runs the source folder instead of a built image, so a
+# code change shows up without a rebuild. Use it together with the main file:
+#   TAG=dev docker compose -f docker-compose.yml -f docker-compose.dev.yml -p hadev up -d
+services:
+  homeassistant:
+    image: php:8.5-cli-alpine
+    volumes:
+      - ./:/app:ro
+    working_dir: /app
+    command: ["php", "-q", "-d", "display_errors=0", "-d", "log_errors=1", "-d", "error_log=/proc/self/fd/2",
+              "-S", "0.0.0.0:8080", "-t", "/app/public", "/app/router.php"]

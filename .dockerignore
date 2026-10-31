@@ -1,0 +1,9 @@
+# Only the app goes into the image. Settings, data, tests, and docs stay out.
+*
+!router.php
+!core/
+!public/
+!plugins/
+!tools/
+plugins/*/tests/
+tools/build-image.sh
