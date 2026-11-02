@@ -13,7 +13,7 @@ function tempAxis(series) {
   return { min, max };
 }
 
-/** Splits points into runs without gaps longer than GAP_BUCKETS buckets. */
+/** Splits points into runs without gaps longer than GAP_BUCKETS buckets. The chart joins the runs with a dotted line. */
 function segments(points, bucketSeconds) {
   const runs = [];
   let run = [];
@@ -65,7 +65,15 @@ export function renderChart({ series, from, to, bucketSeconds, colors, width, he
 
   for (const s of series) {
     const color = colors[s.id] || '#444';
-    for (const run of segments(s.points, bucketSeconds)) {
+    const runs = segments(s.points, bucketSeconds);
+    // A dotted line joins the runs, so a gap reads as a guess, not as a reading.
+    for (let i = 1; i < runs.length; i++) {
+      const a = runs[i - 1][runs[i - 1].length - 1];
+      const b = runs[i][0];
+      out.push(`<polyline class="gap" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="1 5" stroke-linecap="round" opacity="0.6" points="${x(a[0])},${yTemp(a[1])} ${x(b[0])},${yTemp(b[1])}"/>`);
+      out.push(`<polyline class="gap" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="1 5" stroke-linecap="round" opacity="0.5" points="${x(a[0])},${yHum(a[2])} ${x(b[0])},${yHum(b[2])}"/>`);
+    }
+    for (const run of runs) {
       const temp = run.map((p) => `${x(p[0])},${yTemp(p[1])}`).join(' ');
       const hum = run.map((p) => `${x(p[0])},${yHum(p[2])}`).join(' ');
       out.push(`<polyline fill="none" stroke="${color}" stroke-width="2.5" stroke-linejoin="round" points="${temp}"/>`);

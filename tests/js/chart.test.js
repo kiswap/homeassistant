@@ -47,8 +47,31 @@ test('chart humidity dashed, temperature solid, colored per series', () => {
 
 test('chart breaks line on gap', () => {
   const s = renderChart({ ...base, series: [{ id: 'a', label: 'a', points: pts([[0, 1, 50], [300, 2, 50], [600, 3, 50], [3600, 4, 50], [3900, 5, 50]]) }] });
-  // 2 temperature segments + 2 humidity segments
-  assert.equal(count(s, '<polyline'), 4);
+  // 2 temperature segments + 2 humidity segments, plus a dotted bridge for each
+  assert.equal(count(s, '<polyline'), 6);
+  assert.equal(count(s, 'class="gap"'), 2);
+});
+
+test('chart bridges a gap from the last point before it to the first point after it', () => {
+  const s = renderChart({ ...base, series: [{ id: 'a', label: 'a', points: pts([[0, 1, 50], [300, 2, 50], [3600, 4, 50], [3900, 5, 50]]) }] });
+  const bridges = s.match(/<polyline class="gap"[^>]*points="([^"]*)"/g);
+  assert.equal(bridges.length, 2);
+  const xs = bridges.map((b) => b.match(/points="([^"]*)"/)[1].split(' ').map((p) => Number(p.split(',')[0])));
+  const x = (ts) => Number((40 + (ts / 86400) * 520).toFixed(1));
+  for (const pair of xs) assert.deepEqual(pair, [x(300), x(3600)]);
+});
+
+test('chart bridges long gaps too, but draws nothing after the last point', () => {
+  const s = renderChart({ ...base, series: [{ id: 'a', label: 'a', points: pts([[0, 1, 50], [300, 2, 50], [43200, 4, 50]]) }] });
+  assert.equal(count(s, 'class="gap"'), 2);
+  const t = renderChart({ ...base, series: [{ id: 'a', label: 'a', points: pts([[0, 1, 50], [300, 2, 50]]) }] });
+  assert.equal(count(t, 'class="gap"'), 0);
+});
+
+test('chart does not bridge short gaps; the line stays solid', () => {
+  const s = renderChart({ ...base, series: [{ id: 'a', label: 'a', points: pts([[0, 1, 50], [900, 2, 50]]) }] });
+  assert.equal(count(s, 'class="gap"'), 0);
+  assert.equal(count(s, '<polyline'), 2);
 });
 
 test('chart week range uses weekday labels', () => {
