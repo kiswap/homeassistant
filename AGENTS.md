@@ -36,7 +36,9 @@ The design of the split is in
   `Http.php`, and `Db.php` (opens SQLite with WAL).
 - `public/` is the dashboard core: `index.html`, `css/`, and `js/`
   (`main.js` builds the grid; `chart.js` is the hand-written SVG chart;
-  `format.js`, `api.js`, `bus.js`, and `widgets.js` are helpers).
+  `format.js`, `api.js`, `bus.js`, and `widgets.js` are helpers;
+  `battery.js` shows the tablet's battery from the browser's Battery
+  Status API as a small overlay in the top-left corner).
 - `plugins/<name>/` holds one plugin: `src/` (PHP), `web/` (browser
   files), and `tests/` (PHP tests, and JS tests in `tests/js/`).
 - `config/settings.json` is the real settings file (git-ignored, holds the

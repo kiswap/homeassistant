@@ -7,6 +7,7 @@ import { getJson } from './api.js';
 import { bus } from './bus.js';
 import { widgetSource, widgetClass } from './widgets.js';
 import * as placeholder from './widgets/placeholder.js';
+import { startBattery } from './battery.js';
 
 const core = { placeholder };
 
@@ -96,4 +97,5 @@ async function start() {
   setInterval(refreshAll, config.refresh_seconds * 1000);
 }
 
+startBattery(document.getElementById('battery'));
 start();

@@ -302,6 +302,19 @@ html, body {
 .status span + span { margin-left: 12px; }
 .status .stale { color: #c5221f; font-weight: 600; }
 
+/* The tablet's battery. It sits in the empty top-left corner of the first
+   widget (the clock), above everything else. */
+.battery {
+  position: fixed;
+  top: 16px;
+  left: 22px;
+  z-index: 10;
+  font-size: 14px;
+  color: #8a939c;
+}
+.battery[hidden] { display: none; }
+.battery.low { color: #c5221f; font-weight: 600; }
+
 /* ---- phone and narrow windows: one column, page scrolls ---- */
 
 @media (max-width: 700px) {
