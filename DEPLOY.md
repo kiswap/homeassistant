@@ -4,9 +4,9 @@ These steps install and update the hub on krpi, the Raspberry Pi
 described in `../krpi.md`. You run them by hand.
 
 The code reaches krpi only inside a Docker image. The build PC builds the
-image for krpi's ARM CPU and saves it to a file. krpi keeps only three
-things as files in `/var/www/html/homeassistant/`: `docker-compose.yml`,
-the environment file `.env`, and `config/settings.json`.
+image for krpi's ARM CPU. krpi keeps only three things as files in
+`/var/www/html/homeassistant/`: `docker-compose.yml`, the environment file
+`.env`, and `config/settings.json`.
 
 The commands below use `krpi` as the SSH host name (an alias in your SSH
 config). On krpi, `docker` runs with `sudo`.
@@ -20,37 +20,61 @@ config). On krpi, `docker` runs with `sudo`.
   `/mnt/usb/thermobeacon`.
 - A free port on krpi. On krpi this is 8081.
 
-## Building and copying an image
+## Building and deploying an image
 
 Every install and update starts here, on the build PC, in this repo:
 
 1. Commit your changes first, so the image tag names a real commit. (With
    uncommitted changes the tag ends in `-dirty`.)
-2. Build the image:
+2. Build and deploy the image:
 
    ```sh
    bash tools/build-image.sh
    ```
 
-   It writes `dist/nobackup/homeassistant-<tag>.tar.gz` (about 40 MB),
-   where `<tag>` is the commit, for example `4c97986`. Then it copies the
-   file to krpi, loads it, and runs `sudo docker compose up -d` in
-   `/var/www/html/homeassistant` on krpi.
-3. The script does this step itself. To do it by hand, copy the file to
-   krpi and load it:
+   `<tag>` is the commit, for example `4c97986`. The script builds
+   `homeassistant:<tag>` for krpi. Then it starts a Docker registry on the
+   build PC (the container `homeassistant-registry`, with its data in the
+   volume `homeassistant-registry`) and pushes the image to it. krpi pulls
+   the image through an SSH tunnel, so krpi downloads only the layers it
+   does not have yet. A code change is about 100 kB; the PHP base image
+   (about 40 MB) goes over only on the first deploy. On krpi the script
+   tags the image `homeassistant:<tag>` and `homeassistant:latest` and runs
+   `sudo docker compose up -d` in `/var/www/html/homeassistant`. Then it
+   runs `tools/clean-krpi.sh` (see "Removing old images from krpi"). At
+   the end it stops the registry, also when a step fails.
 
-   ```sh
-   scp dist/nobackup/homeassistant-<tag>.tar.gz krpi:/tmp
-   ssh krpi 'sudo docker load -i /tmp/homeassistant-<tag>.tar.gz && rm /tmp/homeassistant-<tag>.tar.gz'
-   ```
+   The registry uses port 5000 on the build PC and on krpi. If that port is
+   taken on either side, set another one: `REGISTRY_PORT=5055 bash
+   tools/build-image.sh`.
 
-   `docker load` prints `Loaded image: homeassistant:<tag>` and
-   `Loaded image: homeassistant:latest`. The file carries both tags, so
-   `latest` now points to this version.
+3. To get the whole image as a file as well, run
+   `bash tools/build-image.sh --save`. It also writes
+   `dist/nobackup/homeassistant-<tag>.tar.gz` (about 40 MB). On krpi,
+   `sudo docker load -i homeassistant-<tag>.tar.gz` loads it with both tags,
+   without the registry.
+
+## Removing old images from krpi
+
+`tools/build-image.sh` runs this cleanup after every deploy. To run it by
+hand, for example with another `KEEP`, run on the build PC:
+
+```sh
+bash tools/clean-krpi.sh --dry-run   # only lists what it would remove
+bash tools/clean-krpi.sh
+```
+
+It keeps the image that `latest` points to, the image the running
+container uses, and the three newest other versions, so `TAG=<old tag>`
+still works for them. `KEEP=5 bash tools/clean-krpi.sh` keeps five. Then it
+removes all dangling images (images with no tag) on krpi, also those of
+other projects. The PHP base image stays, because the kept images use it.
 
 ## Fresh install
 
-1. Build, copy, and load an image as above.
+1. Build and deploy an image as above. The script's last step,
+   `docker compose up`, fails until steps 2 to 4 are done; run it by hand
+   in step 5.
 2. On krpi, create the folders:
    `mkdir -p /var/www/html/homeassistant/config` and
    `sudo mkdir -p /mnt/usb/thermobeacon`.
@@ -92,11 +116,10 @@ Every install and update starts here, on the build PC, in this repo:
 
 ## Updating to a new version
 
-1. Build, copy, and load the new image as above.
-2. If `docker-compose.yml` changed in git, copy it to krpi again.
-3. On krpi, in `/var/www/html/homeassistant/`, run
-   `sudo docker compose up -d`. Compose sees that `latest` points to a
-   new image and replaces the container. The data and the settings stay.
+1. If `docker-compose.yml` changed in git, copy it to krpi first.
+2. Build and deploy the new image as above. Compose sees that `latest`
+   points to a new image and replaces the container. The data and the
+   settings stay.
 
 To go back to an older version, set `TAG=<old tag>` in `.env` and run
 `sudo docker compose up -d`. Remove the `TAG` line again to return to

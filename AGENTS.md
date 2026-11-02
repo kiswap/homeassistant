@@ -114,11 +114,17 @@ Run from this folder:
   settings, data, and docs out. The Dockerfile must stay free of `RUN`
   steps: then the laptop builds the ARMv6 image without ARM emulation,
   which is not installed.
-- `tools/build-image.sh` builds `homeassistant:<git hash>` and
-  `homeassistant:latest` for `linux/arm/v6` and saves both tags, gzipped,
-  to `dist/nobackup/` (git-ignored, about 40 MB). After `docker load` on
-  krpi, the compose file runs `latest`. `TAG` in krpi's environment file
-  is set only to go back to an older version.
+- `tools/build-image.sh` builds `homeassistant:<git hash>` for
+  `linux/arm/v6` and deploys it. It runs a Docker registry on the build PC
+  only during the deploy, and krpi pulls from it through an SSH tunnel.
+  So krpi downloads only the changed layers (about 100 kB), not the PHP
+  base image. On krpi the image is also tagged `latest`, which the
+  compose file runs. `TAG` in krpi's environment file is set only to go
+  back to an older version. `--save` also writes the whole image, gzipped,
+  to `dist/nobackup/` (git-ignored, about 40 MB) for `docker load`.
+- `tools/clean-krpi.sh` removes old hub images from krpi. It keeps the
+  image in use and the three newest other versions. `build-image.sh`
+  runs it after every deploy.
 - The smoke test builds the image for this PC and runs it with the
   production compose file, so it covers the Dockerfile too.
 
