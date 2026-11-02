@@ -70,8 +70,8 @@ export function renderChart({ series, from, to, bucketSeconds, colors, width, he
     for (let i = 1; i < runs.length; i++) {
       const a = runs[i - 1][runs[i - 1].length - 1];
       const b = runs[i][0];
-      out.push(`<polyline class="gap" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="1 5" stroke-linecap="round" opacity="0.6" points="${x(a[0])},${yTemp(a[1])} ${x(b[0])},${yTemp(b[1])}"/>`);
-      out.push(`<polyline class="gap" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="1 5" stroke-linecap="round" opacity="0.5" points="${x(a[0])},${yHum(a[2])} ${x(b[0])},${yHum(b[2])}"/>`);
+      out.push(`<polyline class="gap" fill="none" stroke="${color}" stroke-width="2" stroke-dasharray="1 3" stroke-linecap="round" opacity="0.6" points="${x(a[0])},${yTemp(a[1])} ${x(b[0])},${yTemp(b[1])}"/>`);
+      out.push(`<polyline class="gap" fill="none" stroke="${color}" stroke-width="1.5" stroke-dasharray="1 3" stroke-linecap="round" opacity="0.5" points="${x(a[0])},${yHum(a[2])} ${x(b[0])},${yHum(b[2])}"/>`);
     }
     for (const run of runs) {
       const temp = run.map((p) => `${x(p[0])},${yTemp(p[1])}`).join(' ');
